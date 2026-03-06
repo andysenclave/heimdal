@@ -1,0 +1,10 @@
+node_modules
+dist
+.turbo
+.git
+*.md
+.env*
+!.env.example
+coverage
+.vscode
+.idea

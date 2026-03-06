@@ -1,0 +1,205 @@
+openapi: 3.1.0
+info:
+  title: Heimdal Guard API
+  description: Access control enforcement — validates JWTs and checks entitlements against access bindings.
+  version: 0.1.0
+  contact:
+    name: Thimple Engineering
+
+servers:
+  - url: https://staging.heimdal.thimple.in/api/v1
+    description: Staging
+  - url: https://heimdal.thimple.in/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+paths:
+  /guard/check:
+    post:
+      operationId: guardCheck
+      summary: Check access
+      description: |
+        Validates the JWT from the Authorization header, resolves the user's
+        effective permissions for the specified app, and checks whether the
+        requested resource is permitted via access bindings.
+      tags:
+        - Guard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-App-Id
+          in: header
+          required: true
+          description: Application identifier (e.g., app_mimir_staging)
+          schema:
+            type: string
+            example: app_mimir_staging
+        - name: X-Request-Id
+          in: header
+          required: false
+          description: Request correlation ID for tracing
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardCheckRequest'
+            examples:
+              tradeExecute:
+                summary: Check trade execution permission
+                value:
+                  resource: 'POST /api/trades'
+                  context:
+                    portfolioId: port_abc123
+              portfolioRead:
+                summary: Check portfolio read permission
+                value:
+                  resource: 'GET /api/portfolio/:id'
+                  context:
+                    portfolioId: port_abc123
+      responses:
+        '200':
+          description: Guard decision (allowed or denied)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardCheckResponse'
+              examples:
+                allowed:
+                  summary: Access allowed
+                  value:
+                    allowed: true
+                    user:
+                      id: user_abc
+                      orgId: org_thimple
+                      roles:
+                        - user
+                    matchedPermissions:
+                      - trade:execute
+                    decisionId: dec_xyz789
+                    resolvedAt: '2026-03-15T10:30:00Z'
+                denied:
+                  summary: Access denied
+                  value:
+                    allowed: false
+                    user:
+                      id: user_abc
+                      orgId: org_thimple
+                      roles:
+                        - viewer
+                    matchedPermissions: []
+                    requiredPermissions:
+                      - trade:execute
+                    decisionId: dec_xyz790
+                    resolvedAt: '2026-03-15T10:30:01Z'
+        '401':
+          description: Invalid or expired JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 401
+                error: Unauthorized
+                message: JWT expired or invalid
+        '403':
+          description: Unregistered app or invalid app credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: Application not registered or invalid credentials
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    GuardCheckRequest:
+      type: object
+      required:
+        - resource
+      properties:
+        resource:
+          type: string
+          description: 'Resource pattern to check (e.g., "POST /api/trades")'
+          example: 'POST /api/trades'
+        context:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional context for parameterized resource matching
+          example:
+            portfolioId: port_abc123
+
+    GuardCheckResponse:
+      type: object
+      required:
+        - allowed
+        - user
+        - matchedPermissions
+        - decisionId
+        - resolvedAt
+      properties:
+        allowed:
+          type: boolean
+          description: Whether access is granted
+        user:
+          type: object
+          required:
+            - id
+            - orgId
+            - roles
+          properties:
+            id:
+              type: string
+              example: user_abc
+            orgId:
+              type: string
+              example: org_thimple
+            roles:
+              type: array
+              items:
+                type: string
+              example:
+                - user
+        matchedPermissions:
+          type: array
+          items:
+            type: string
+          description: Permissions that matched the resource
+          example:
+            - trade:execute
+        requiredPermissions:
+          type: array
+          items:
+            type: string
+          description: Permissions required for the resource (present on deny)
+        decisionId:
+          type: string
+          description: Unique decision ID for audit trail
+          example: dec_xyz789
+        resolvedAt:
+          type: string
+          format: date-time
+          description: Timestamp of the guard decision
+
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string

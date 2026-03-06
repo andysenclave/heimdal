@@ -1,0 +1,31 @@
+{
+  "name": "@heimdal/prisma-client",
+  "version": "0.1.0",
+  "description": "Prisma client and schema for Heimdal",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "prisma"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "echo \"No lint for prisma-client\"",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No tests yet\"",
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.4.0",
+    "typescript": "^5.7.0"
+  }
+}
