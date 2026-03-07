@@ -1,0 +1,1 @@
+Read docs/coding-prompts/05-theming-and-design-tokens.md before working with colors, fonts, or styling. Never hardcode hex colors — always use `const t = useTheme()` and reference tokens like `t.amber`, `t.surface`, `t.border`. When adding new semantic colors, add to BOTH dark and light token sets. Use `display` font for headings, `sans` for body, `mono` for data/numbers/code.
