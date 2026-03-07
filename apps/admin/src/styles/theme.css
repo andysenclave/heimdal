@@ -1,0 +1,49 @@
+:root {
+  --color-bg: 10 10 12;
+  --color-surface: 20 20 23;
+  --color-surface-hover: 26 26 30;
+  --color-raised: 30 30 35;
+  --color-sidebar: 14 14 17;
+  --color-amber: 232 168 73;
+  --color-amber-dim: 184 134 58;
+  --color-copper: 184 115 51;
+  --color-teal: 45 212 191;
+  --color-green: 52 211 153;
+  --color-red: 248 113 113;
+  --color-purple: 167 139 250;
+  --color-text: 245 240 228;
+  --color-text-soft: 176 170 160;
+  --color-text-dim: 107 102 96;
+  --color-text-copper: 212 160 106;
+  --color-border: 42 42 48;
+  --color-border-copper: 184 115 51;
+  --color-border-dim: 30 30 35;
+  --shadow-card: 0 4px 24px rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 8px 48px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(184 115 51 / 0.2);
+  --shadow-glow: 0 0 20px rgb(232 168 73 / 0.06);
+}
+
+.light {
+  --color-bg: 250 248 245;
+  --color-surface: 255 255 255;
+  --color-surface-hover: 245 242 237;
+  --color-raised: 240 237 231;
+  --color-sidebar: 26 23 20;
+  --color-amber: 196 136 46;
+  --color-amber-dim: 160 112 40;
+  --color-copper: 154 96 48;
+  --color-teal: 13 148 136;
+  --color-green: 22 163 74;
+  --color-red: 220 38 38;
+  --color-purple: 124 58 237;
+  --color-text: 28 25 23;
+  --color-text-soft: 87 83 78;
+  --color-text-dim: 168 162 158;
+  --color-text-copper: 146 97 58;
+  --color-border: 231 229 228;
+  --color-border-copper: 196 168 130;
+  --color-border-dim: 240 237 231;
+  --shadow-card: 0 2px 12px rgb(0 0 0 / 0.06);
+  --shadow-modal: 0 8px 48px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(196 136 46 / 0.1);
+  --shadow-glow: none;
+}
