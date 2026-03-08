@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health.controller';
+import { PrismaModule } from './common/prisma';
 import { AuthModule } from './modules/auth';
 import { OrgModule } from './modules/org';
 import { EntitlementModule } from './modules/entitlement';
@@ -14,6 +15,7 @@ import { AuditModule } from './modules/audit';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+    PrismaModule,
     AuthModule,
     OrgModule,
     EntitlementModule,

@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { OrgService } from './org.service';
+import { CreateOrgDto } from './dto/create-org.dto';
+import { UpdateOrgDto } from './dto/update-org.dto';
 
 @ApiTags('admin/orgs')
 @ApiBearerAuth()
@@ -11,8 +13,8 @@ export class OrgController {
   @Post()
   @ApiOperation({ summary: 'Create organization' })
   @ApiResponse({ status: 201, description: 'Organization created' })
-  async create(@Body() body: Record<string, unknown>) {
-    return this.orgService.create(body);
+  async create(@Body() dto: CreateOrgDto) {
+    return this.orgService.create(dto);
   }
 
   @Get()
@@ -33,8 +35,8 @@ export class OrgController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update organization' })
   @ApiResponse({ status: 200, description: 'Organization updated' })
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.orgService.update(id, body);
+  async update(@Param('id') id: string, @Body() dto: UpdateOrgDto) {
+    return this.orgService.update(id, dto);
   }
 
   @Delete(':id')

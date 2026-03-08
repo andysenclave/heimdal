@@ -21,6 +21,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/swagger": "^11.0.0",
+    "@heimdal/prisma-client": "*",
     "@heimdal/shared": "*",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
