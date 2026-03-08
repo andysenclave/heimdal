@@ -142,6 +142,8 @@ vite.config.ts.timestamp-*
 
 # Local env files
 .env.local
+.env.example
+.env.example.local
 
 # IDE
 .vscode
@@ -149,3 +151,6 @@ vite.config.ts.timestamp-*
 
 # Local planning docs — never committed
 resources/
+
+# claude files to be ignored
+.claude/*

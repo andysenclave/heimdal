@@ -14,6 +14,7 @@ const GuardTester = lazy(() => import('@pages/GuardTester'));
 const AuditLog = lazy(() => import('@pages/AuditLog'));
 const Profile = lazy(() => import('@pages/Profile'));
 const Login = lazy(() => import('@pages/Login'));
+const Signup = lazy(() => import('@pages/Signup'));
 const NotFound = lazy(() => import('@pages/NotFound'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
@@ -55,6 +56,10 @@ const routes: RouteObject[] = [
   {
     path: ROUTES.LOGIN,
     element: <LazyPage><Login /></LazyPage>,
+  },
+  {
+    path: ROUTES.SIGNUP,
+    element: <LazyPage><Signup /></LazyPage>,
   },
   {
     path: '*',

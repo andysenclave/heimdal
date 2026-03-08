@@ -1,17 +1,20 @@
 import {
   Controller,
   Post,
-  Body,
   Get,
+  Body,
+  Query,
   HttpCode,
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { JwtAuthGuard, Public } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { HeimdalJwtClaims } from '@heimdal/shared';
@@ -23,11 +26,30 @@ export class AuthController {
 
   @Public()
   @Post('signup')
-  @ApiOperation({ summary: 'Register a new user (creates personal org)' })
-  @ApiResponse({ status: 201, description: 'User created. Returns access + refresh tokens.' })
+  @ApiOperation({ summary: 'Register a new user (creates personal org, sends verification email)' })
+  @ApiResponse({ status: 201, description: 'User created. Returns tokens. Check email to verify.' })
   @ApiResponse({ status: 409, description: 'Email already registered' })
   async signup(@Body() dto: SignupDto) {
     return this.authService.signup(dto);
+  }
+
+  @Public()
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email address via token from email link' })
+  @ApiQuery({ name: 'token', description: 'Verification token from the email link' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmail(@Query() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend verification email (always returns 200 to prevent enumeration)' })
+  @ApiResponse({ status: 200, description: 'Verification email sent if applicable' })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 
   @Public()

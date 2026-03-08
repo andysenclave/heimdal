@@ -9,6 +9,7 @@ export const ROUTES = {
   AUDIT_LOG: '/audit-log',
   PROFILE: '/profile',
   LOGIN: '/login',
+  SIGNUP: '/signup',
 } as const;
 
 export const NAV_ITEMS = [

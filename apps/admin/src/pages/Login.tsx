@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@api/client';
@@ -102,6 +102,17 @@ export default function Login() {
             {isSubmitting ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        {/* Signup link */}
+        <p className="mt-6 text-center font-mono text-[10px] text-deco-text-dim">
+          Don&apos;t have an account?{' '}
+          <Link
+            to={ROUTES.SIGNUP}
+            className="text-deco-amber transition-opacity hover:opacity-80"
+          >
+            Create one
+          </Link>
+        </p>
       </div>
     </div>
   );

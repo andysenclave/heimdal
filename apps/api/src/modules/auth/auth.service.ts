@@ -4,19 +4,24 @@ import {
   ConflictException,
   UnauthorizedException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { PrismaService } from '../../common/prisma';
+import { EmailService } from '../../common/email/email.service';
 import type { HeimdalJwtClaims } from '@heimdal/shared';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 
 const BCRYPT_ROUNDS = 12;
 const REFRESH_TOKEN_BYTES = 48;
 const REFRESH_TTL_DAYS = 7;
+const VERIFY_TOKEN_BYTES = 32;
+const VERIFY_TTL_HOURS = 24;
 
 @Injectable()
 export class AuthService {
@@ -25,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly email: EmailService,
   ) {}
 
   // ─── Signup ──────────────────────────────────────────────────────────────
@@ -36,8 +42,10 @@ export class AuthService {
     }
 
     const hashed = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
+    const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
 
-    // Transaction: create User → default Org → OrgMembership (HD-011)
+    // Transaction: create User → default Org → OrgMembership → Session
     const { user, org, session, accessToken, refreshToken } = await this.prisma.$transaction(
       async (tx) => {
         const user = await tx.user.create({
@@ -46,10 +54,12 @@ export class AuthService {
             name: dto.name,
             password: hashed,
             emailVerified: false,
+            emailVerificationToken: verificationToken,
+            emailVerificationExpiry: verificationExpiry,
           },
         });
 
-        // Auto-create a personal org for the user (HD-011 hook)
+        // Auto-create a personal org for the user
         const orgSlug = this.slugify(dto.name ?? dto.email.split('@')[0]);
         const org = await tx.organization.create({
           data: {
@@ -58,7 +68,6 @@ export class AuthService {
           },
         });
 
-        // Make the user the owner of their org (HD-011 hook)
         await tx.orgMembership.create({
           data: { userId: user.id, orgId: org.id, role: 'owner' },
         });
@@ -74,21 +83,98 @@ export class AuthService {
       },
     );
 
-    this.logger.log(`Signup: ${user.email} → org ${org.id}`);
+    // Fire verification email outside the transaction (non-blocking failure)
+    this.email.sendVerificationEmail(user.email, verificationToken).catch((err: unknown) => {
+      this.logger.error(`Failed to send verification email to ${user.email}`, err);
+    });
+
+    this.logger.log(`Signup: ${user.email} → org ${org.id} (email verification pending)`);
 
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, orgId: org.id },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        orgId: org.id,
+        emailVerified: false,
+      },
       sessionId: session.id,
     };
+  }
+
+  // ─── Verify Email ─────────────────────────────────────────────────────────
+
+  async verifyEmail(token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { emailVerificationToken: token },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    if (!user.emailVerificationExpiry || user.emailVerificationExpiry < new Date()) {
+      throw new BadRequestException('Verification token has expired. Please request a new one.');
+    }
+
+    if (user.emailVerified) {
+      // Idempotent — already verified, just clear the token and return success
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerificationToken: null, emailVerificationExpiry: null },
+      });
+      return { message: 'Email already verified' };
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpiry: null,
+      },
+    });
+
+    this.logger.log(`Email verified: ${user.email}`);
+    return { message: 'Email verified successfully' };
+  }
+
+  // ─── Resend Verification ─────────────────────────────────────────────────
+
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+
+    // Always return success — don't leak whether the email exists
+    if (!user || user.emailVerified) {
+      return { message: 'If that email exists and is unverified, a new link has been sent.' };
+    }
+
+    const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
+    const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationToken: verificationToken,
+        emailVerificationExpiry: verificationExpiry,
+      },
+    });
+
+    this.email.sendVerificationEmail(user.email, verificationToken).catch((err: unknown) => {
+      this.logger.error(`Failed to resend verification email to ${user.email}`, err);
+    });
+
+    this.logger.log(`Resent verification email: ${user.email}`);
+    return { message: 'If that email exists and is unverified, a new link has been sent.' };
   }
 
   // ─── Login ───────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user || !user.password) {
+    if (!user?.password) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -106,7 +192,6 @@ export class AuthService {
       throw new UnauthorizedException('User has no organization membership');
     }
 
-    // Resolve roles: org-level role + app-level roles (if appId given)
     const roles = await this.resolveRoles(user.id, membership.orgId, dto.appId);
     const aud = dto.appId ?? 'heimdal-admin';
 
@@ -126,7 +211,13 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, orgId: membership.orgId },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        orgId: membership.orgId,
+        emailVerified: user.emailVerified,
+      },
       sessionId: session.id,
     };
   }
@@ -147,7 +238,6 @@ export class AuthService {
     }
 
     try {
-      // Resolve fresh from DB (can't validate expired AT)
       const membership = await this.prisma.orgMembership.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: 'asc' },
@@ -241,7 +331,6 @@ export class AuthService {
   }
 
   private hashRefreshToken(token: string): string {
-    // Store a SHA-256 hash — never persist raw refresh tokens
     return createHash('sha256').update(token).digest('hex');
   }
 
@@ -258,8 +347,13 @@ export class AuthService {
 
     if (!appId) return [orgRole];
 
+    // dto.appId is the public appId string (e.g. "app_mimir").
+    // UserAppRole.appId stores the internal Application.id — resolve first.
+    const app = await this.prisma.application.findUnique({ where: { appId } });
+    if (!app) return [orgRole];
+
     const appRoles = await this.prisma.userAppRole.findMany({
-      where: { userId, appId },
+      where: { userId, appId: app.id },
       include: { role: { select: { name: true } } },
     });
 
@@ -270,8 +364,8 @@ export class AuthService {
   private slugify(name: string): string {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replaceAll(/[^a-z0-9]+/g, '-')
+      .replaceAll(/^-|-$/g, '');
   }
 
   private async uniqueSlug(

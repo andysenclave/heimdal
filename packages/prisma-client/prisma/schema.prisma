@@ -67,12 +67,14 @@ model Application {
 // ─────────────────────────────────────────────
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  password      String?           // Nullable: social login users have no password
-  emailVerified Boolean  @default(false)
-  image         String?
+  id                       String    @id @default(cuid())
+  email                    String    @unique
+  name                     String?
+  password                 String?           // Nullable: social login users have no password
+  emailVerified            Boolean   @default(false)
+  emailVerificationToken   String?   @unique // short-lived token sent via email
+  emailVerificationExpiry  DateTime?         // token expires after 24h
+  image                    String?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
