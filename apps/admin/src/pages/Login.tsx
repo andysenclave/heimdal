@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@api/client';
+import { tokenStore } from '@api/tokenStore';
 import { useAuth } from '@auth/hooks/useAuth';
 import { loginSchema, type LoginFormData } from '@lib/validation';
 import { ROUTES } from '@lib/constants';
+import type { AuthResponse } from '@api/types';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -23,7 +25,8 @@ export default function Login() {
   const onSubmit = async (data: LoginFormData) => {
     setServerError(null);
     try {
-      await api.post('auth/login', { json: data });
+      const response = await api.post('auth/login', { json: data }).json<AuthResponse>();
+      tokenStore.setTokens(response.accessToken, response.refreshToken);
       await refetchSession();
       navigate(ROUTES.DASHBOARD, { replace: true });
     } catch {

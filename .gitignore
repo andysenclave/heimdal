@@ -146,3 +146,6 @@ vite.config.ts.timestamp-*
 # IDE
 .vscode
 .idea
+
+# Local planning docs — never committed
+resources/

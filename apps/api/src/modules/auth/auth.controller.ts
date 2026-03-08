@@ -1,51 +1,71 @@
-import { Controller, Post, Body, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
+import { JwtAuthGuard, Public } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { HeimdalJwtClaims } from '@heimdal/shared';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('signup')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({ status: 201, description: 'User created successfully' })
+  @ApiOperation({ summary: 'Register a new user (creates personal org)' })
+  @ApiResponse({ status: 201, description: 'User created. Returns access + refresh tokens.' })
   @ApiResponse({ status: 409, description: 'Email already registered' })
-  async signup(@Body() body: Record<string, unknown>) {
-    return this.authService.signup(body);
+  async signup(@Body() dto: SignupDto) {
+    return this.authService.signup(dto);
   }
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Authenticate user' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiOperation({ summary: 'Authenticate with email + password' })
+  @ApiResponse({ status: 200, description: 'Returns access + refresh tokens.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() body: Record<string, unknown>) {
-    return this.authService.login(body);
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate refresh token and issue new access token' })
+  @ApiResponse({ status: 200, description: 'New token pair issued.' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
+  async refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto);
+  }
+
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Invalidate session' })
-  @ApiResponse({ status: 200, description: 'Logged out' })
-  async logout() {
-    return this.authService.logout();
+  @ApiResponse({ status: 200, description: 'Session deleted.' })
+  async logout(@Body() dto: RefreshDto) {
+    return this.authService.logout(dto);
   }
 
-  @Post('refresh')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token' })
-  @ApiResponse({ status: 200, description: 'Token refreshed' })
-  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refresh(@Body() body: Record<string, unknown>) {
-    return this.authService.refresh(body);
-  }
-
+  @UseGuards(JwtAuthGuard)
   @Get('session')
-  @ApiOperation({ summary: 'Get current session' })
-  @ApiResponse({ status: 200, description: 'Session details' })
-  @ApiResponse({ status: 401, description: 'Not authenticated' })
-  async getSession() {
-    return this.authService.getSession();
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current session (requires valid access token)' })
+  @ApiResponse({ status: 200, description: 'Session and user details.' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  async getSession(@CurrentUser() claims: HeimdalJwtClaims) {
+    return this.authService.getSession(claims);
   }
 }

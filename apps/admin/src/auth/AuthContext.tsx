@@ -1,8 +1,8 @@
 import { createContext } from 'react';
-import type { SessionResponse } from '@api/types';
+import type { AuthUser } from '@api/types';
 
 export interface AuthContextValue {
-  session: SessionResponse['user'] | null;
+  session: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   signOut: () => Promise<void>;

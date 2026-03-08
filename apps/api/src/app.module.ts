@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './common/prisma';
@@ -9,6 +10,7 @@ import { EntitlementModule } from './modules/entitlement';
 import { GuardModule } from './modules/guard';
 import { CmsModule } from './modules/cms';
 import { AuditModule } from './modules/audit';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -17,7 +19,7 @@ import { AuditModule } from './modules/audit';
       envFilePath: ['.env.local', '.env'],
     }),
     PrismaModule,
-    AuthModule,
+    AuthModule,   // @Global() — exports JwtModule globally, used by JwtAuthGuard below
     OrgModule,
     ApplicationModule,
     EntitlementModule,
@@ -26,5 +28,12 @@ import { AuditModule } from './modules/audit';
     AuditModule,
   ],
   controllers: [HealthController],
+  providers: [
+    // Apply JwtAuthGuard to every route — use @Public() to opt out
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}
