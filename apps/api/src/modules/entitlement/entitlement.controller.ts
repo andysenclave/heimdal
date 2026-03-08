@@ -1,6 +1,13 @@
-import { Controller, Get, Post, Delete, Param, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { EntitlementService } from './entitlement.service';
+import {
+  CreateRoleDto,
+  UpdateRoleDto,
+  CreatePermissionDto,
+  UpdatePermissionDto,
+  AssignPermissionsDto,
+} from './dto';
 
 @ApiTags('admin/entitlements')
 @ApiBearerAuth()
@@ -8,62 +15,130 @@ import { EntitlementService } from './entitlement.service';
 export class EntitlementController {
   constructor(private readonly entitlementService: EntitlementService) {}
 
-  // --- Roles ---
+  // ─── Roles (nested — create) ───────────────────────────────────────────────
 
   @Post('apps/:appId/roles')
   @ApiOperation({ summary: 'Create role in app context' })
   @ApiResponse({ status: 201, description: 'Role created' })
-  async createRole(@Param('appId') appId: string, @Body() body: Record<string, unknown>) {
-    return this.entitlementService.createRole(appId, body);
+  async createRole(@Param('appId') appId: string, @Body() dto: CreateRoleDto) {
+    return this.entitlementService.createRole(appId, dto);
   }
 
   @Get('apps/:appId/roles')
-  @ApiOperation({ summary: 'List roles for app' })
-  async listRoles(@Param('appId') appId: string) {
+  @ApiOperation({ summary: 'List roles for a specific app' })
+  async listRolesForApp(@Param('appId') appId: string) {
     return this.entitlementService.listRoles(appId);
   }
 
-  // --- Permissions ---
+  // ─── Roles (flat — list / read / update / delete) ─────────────────────────
+
+  @Get('roles')
+  @ApiOperation({ summary: 'List all roles (optional appId filter)' })
+  @ApiQuery({ name: 'appId', required: false })
+  async listRoles(@Query('appId') appId?: string) {
+    return this.entitlementService.listRoles(appId);
+  }
+
+  @Get('roles/:id')
+  @ApiOperation({ summary: 'Get role by ID' })
+  async getRole(@Param('id') id: string) {
+    return this.entitlementService.getRole(id);
+  }
+
+  @Patch('roles/:id')
+  @ApiOperation({ summary: 'Update role' })
+  async updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+    return this.entitlementService.updateRole(id, dto);
+  }
+
+  @Delete('roles/:id')
+  @ApiOperation({ summary: 'Delete role (non-system only)' })
+  async deleteRole(@Param('id') id: string) {
+    return this.entitlementService.deleteRole(id);
+  }
+
+  // ─── Permissions (nested — create) ────────────────────────────────────────
 
   @Post('apps/:appId/permissions')
   @ApiOperation({ summary: 'Create permission in app context' })
   @ApiResponse({ status: 201, description: 'Permission created' })
-  async createPermission(@Param('appId') appId: string, @Body() body: Record<string, unknown>) {
-    return this.entitlementService.createPermission(appId, body);
+  async createPermission(@Param('appId') appId: string, @Body() dto: CreatePermissionDto) {
+    return this.entitlementService.createPermission(appId, dto);
   }
 
   @Get('apps/:appId/permissions')
-  @ApiOperation({ summary: 'List permissions for app' })
-  async listPermissions(@Param('appId') appId: string) {
+  @ApiOperation({ summary: 'List permissions for a specific app' })
+  async listPermissionsForApp(@Param('appId') appId: string) {
     return this.entitlementService.listPermissions(appId);
   }
 
-  // --- Role-Permission assignment ---
+  // ─── Permissions (flat — list / read / update / delete) ───────────────────
 
-  @Post('roles/:roleId/permissions')
-  @ApiOperation({ summary: 'Assign permissions to role' })
-  async assignPermissions(@Param('roleId') roleId: string, @Body() body: Record<string, unknown>) {
-    return this.entitlementService.assignPermissions(roleId, body);
+  @Get('permissions')
+  @ApiOperation({ summary: 'List all permissions (optional appId filter)' })
+  @ApiQuery({ name: 'appId', required: false })
+  async listPermissions(@Query('appId') appId?: string) {
+    return this.entitlementService.listPermissions(appId);
   }
 
-  // --- User-App-Role assignment ---
+  @Get('permissions/:id')
+  @ApiOperation({ summary: 'Get permission by ID' })
+  async getPermission(@Param('id') id: string) {
+    return this.entitlementService.getPermission(id);
+  }
+
+  @Patch('permissions/:id')
+  @ApiOperation({ summary: 'Update permission description' })
+  async updatePermission(@Param('id') id: string, @Body() dto: UpdatePermissionDto) {
+    return this.entitlementService.updatePermission(id, dto);
+  }
+
+  @Delete('permissions/:id')
+  @ApiOperation({ summary: 'Delete permission' })
+  async deletePermission(@Param('id') id: string) {
+    return this.entitlementService.deletePermission(id);
+  }
+
+  // ─── Role-Permission assignment ────────────────────────────────────────────
+
+  @Post('roles/:roleId/permissions')
+  @ApiOperation({ summary: 'Assign permissions to role (bulk)' })
+  async assignPermissions(@Param('roleId') roleId: string, @Body() dto: AssignPermissionsDto) {
+    return this.entitlementService.assignPermissions(roleId, dto);
+  }
+
+  @Delete('roles/:roleId/permissions/:permissionId')
+  @ApiOperation({ summary: 'Remove permission from role' })
+  async removePermissionFromRole(
+    @Param('roleId') roleId: string,
+    @Param('permissionId') permissionId: string,
+  ) {
+    return this.entitlementService.removePermissionFromRole(roleId, permissionId);
+  }
+
+  // ─── User-App-Role assignment ──────────────────────────────────────────────
 
   @Post('apps/:appId/users/:userId/roles')
-  @ApiOperation({ summary: 'Assign role to user in app' })
+  @ApiOperation({ summary: 'Assign role to user in app context' })
   async assignUserRole(
     @Param('appId') appId: string,
     @Param('userId') userId: string,
-    @Body() body: Record<string, unknown>,
+    @Body('roleId') roleId: string,
   ) {
-    return this.entitlementService.assignUserRole(appId, userId, body);
+    return this.entitlementService.assignUserRole(appId, userId, roleId);
   }
 
-  // --- Access bindings ---
+  // ─── Access bindings ───────────────────────────────────────────────────────
 
   @Post('apps/:appId/bindings')
   @ApiOperation({ summary: 'Create access binding' })
-  async createBinding(@Param('appId') appId: string, @Body() body: Record<string, unknown>) {
-    return this.entitlementService.createBinding(appId, body);
+  async createBinding(
+    @Param('appId') appId: string,
+    @Body('permissionId') permissionId: string,
+    @Body('resource') resource: string,
+    @Body('description') description?: string,
+  ) {
+    return this.entitlementService.createBinding(appId, permissionId, resource, description);
   }
 
   @Get('apps/:appId/bindings')
@@ -72,20 +147,11 @@ export class EntitlementController {
     return this.entitlementService.listBindings(appId);
   }
 
-  // --- Entitlement resolution ---
+  // ─── Entitlement resolution ────────────────────────────────────────────────
 
   @Get('apps/:appId/users/:userId/entitlements')
-  @ApiOperation({ summary: 'Resolve effective permissions for user in app' })
+  @ApiOperation({ summary: 'Resolve effective permissions for user in app (stub)' })
   async resolveEntitlements(@Param('appId') appId: string, @Param('userId') userId: string) {
     return this.entitlementService.resolveEntitlements(appId, userId);
-  }
-
-  @Delete('roles/:roleId/permissions/:permissionId')
-  @ApiOperation({ summary: 'Remove permission from role' })
-  async removePermission(
-    @Param('roleId') roleId: string,
-    @Param('permissionId') permissionId: string,
-  ) {
-    return this.entitlementService.removePermission(roleId, permissionId);
   }
 }

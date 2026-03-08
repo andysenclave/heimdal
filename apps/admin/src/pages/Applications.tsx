@@ -22,7 +22,7 @@ import {
   useUpdateApplication,
   useDeleteApplication,
 } from '@api/hooks/useApplications';
-import type { CreateAppPayload, UpdateAppPayload } from '@api/hooks/useApplications';
+import type { CreateAppPayload, UpdateAppPayload, CreatedApplication } from '@api/hooks/useApplications';
 import { useOrganizations } from '@api/hooks/useOrganizations';
 import { formatDate } from '@lib/format';
 import { useDebounce } from '@hooks/useDebounce';
@@ -43,12 +43,6 @@ const editAppSchema = z.object({
 type CreateAppForm = z.infer<typeof createAppSchema>;
 type EditAppForm = z.infer<typeof editAppSchema>;
 
-// --- Helpers ---
-
-function generateAppId(): string {
-  return `app_${Math.random().toString(36).slice(2, 15)}${Math.random().toString(36).slice(2, 10)}`;
-}
-
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'active', label: 'Active' },
@@ -67,7 +61,7 @@ function CreateAppModal({
   const createApp = useCreateApplication();
   const { data: orgsData } = useOrganizations();
   const orgs = orgsData?.data ?? [];
-  const [previewAppId] = useState(generateAppId);
+  const [created, setCreated] = useState<CreatedApplication | null>(null);
 
   const {
     register,
@@ -79,29 +73,64 @@ function CreateAppModal({
     defaultValues: { name: '', orgId: '' },
   });
 
+  const handleClose = () => {
+    setCreated(null);
+    reset();
+    onClose();
+  };
+
   const onSubmit = async (data: CreateAppForm) => {
-    const payload: CreateAppPayload = {
-      name: data.name,
-      orgId: data.orgId,
-    };
+    const payload: CreateAppPayload = { name: data.name, orgId: data.orgId };
     try {
-      await createApp.mutateAsync(payload);
-      decoToast.success('Application created');
-      reset();
-      onClose();
+      const result = await createApp.mutateAsync(payload);
+      setCreated(result);
     } catch {
       decoToast.error('Failed to create application');
     }
   };
 
+  // Success state — show credentials once
+  if (created) {
+    return (
+      <DecoModal
+        open={open}
+        onClose={handleClose}
+        title="Application Created"
+        footer={
+          <DecoButton onClick={handleClose}>Done</DecoButton>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-deco-text-soft">
+            Save the App Secret now — it will not be shown again.
+          </p>
+          <div className="rounded border border-deco-border-dim bg-deco-bg px-3 py-3 space-y-2">
+            <div>
+              <span className="block font-mono text-[10px] font-medium uppercase tracking-deco-wide text-deco-text-copper">
+                App ID
+              </span>
+              <span className="font-mono text-[12px] text-deco-text-dim select-all">{created.appId}</span>
+            </div>
+            <div>
+              <span className="block font-mono text-[10px] font-medium uppercase tracking-deco-wide text-deco-red">
+                App Secret (shown once)
+              </span>
+              <span className="font-mono text-[12px] text-deco-text select-all">{created.appSecretPlain}</span>
+            </div>
+          </div>
+        </div>
+      </DecoModal>
+    );
+  }
+
   return (
     <DecoModal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Create Application"
       footer={
         <>
-          <DecoButton variant="ghost" onClick={onClose}>
+          <DecoButton variant="ghost" onClick={handleClose}>
             Cancel
           </DecoButton>
           <DecoButton onClick={handleSubmit(onSubmit)} disabled={createApp.isPending}>
@@ -129,16 +158,11 @@ function CreateAppModal({
             </option>
           ))}
         </DecoSelect>
-        <div className="rounded border border-deco-border-dim bg-deco-bg px-3 py-3">
+        <div className="rounded border border-deco-border-dim bg-deco-bg px-3 py-2">
           <span className="block font-mono text-[10px] font-medium uppercase tracking-deco-wide text-deco-text-copper">
             App ID
           </span>
-          <span className="font-mono text-[12px] text-deco-text-dim">
-            {previewAppId}
-          </span>
-          <span className="mt-1 block text-[11px] text-deco-text-soft">
-            Auto-generated on creation
-          </span>
+          <span className="font-mono text-[12px] text-deco-text-dim">Auto-generated on creation</span>
         </div>
       </form>
     </DecoModal>

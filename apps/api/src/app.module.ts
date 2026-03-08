@@ -4,6 +4,7 @@ import { HealthController } from './health.controller';
 import { PrismaModule } from './common/prisma';
 import { AuthModule } from './modules/auth';
 import { OrgModule } from './modules/org';
+import { ApplicationModule } from './modules/application';
 import { EntitlementModule } from './modules/entitlement';
 import { GuardModule } from './modules/guard';
 import { CmsModule } from './modules/cms';
@@ -18,6 +19,7 @@ import { AuditModule } from './modules/audit';
     PrismaModule,
     AuthModule,
     OrgModule,
+    ApplicationModule,
     EntitlementModule,
     GuardModule,
     CmsModule,
