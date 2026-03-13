@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes, createHash } from 'node:crypto';
 import { PrismaService } from '../../common/prisma';
 import { EmailService } from '../../common/email/email.service';
+import { InviteService } from '../invite/invite.service';
 import type { HeimdalJwtClaims } from '@heimdal/shared';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -31,9 +32,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly inviteService: InviteService,
   ) {}
 
-  // ─── Signup ──────────────────────────────────────────────────────────────
+  // ─── Signup (invite-gated) ───────────────────────────────────────────────
 
   async signup(dto: SignupDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -45,9 +47,12 @@ export class AuthService {
     const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
     const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
 
-    // Transaction: create User → default Org → OrgMembership → Session
+    // Transaction: validate invite → create User → Org → Membership → consume invite → Session
     const { user, org, session, accessToken, refreshToken } = await this.prisma.$transaction(
       async (tx) => {
+        // Validate invite code inside the transaction to prevent race conditions
+        const invite = await this.inviteService.consumeInvite(dto.inviteCode, dto.email, tx);
+
         const user = await tx.user.create({
           data: {
             email: dto.email,
@@ -56,10 +61,14 @@ export class AuthService {
             emailVerified: false,
             emailVerificationToken: verificationToken,
             emailVerificationExpiry: verificationExpiry,
+            isHeimdalAdmin: true,
           },
         });
 
-        // Auto-create a personal org for the user
+        // Mark invite as accepted
+        await this.inviteService.markAccepted(invite.id, user.id, tx);
+
+        // Auto-create a personal org for the admin user
         const orgSlug = this.slugify(dto.name ?? dto.email.split('@')[0]);
         const org = await tx.organization.create({
           data: {
@@ -88,7 +97,9 @@ export class AuthService {
       this.logger.error(`Failed to send verification email to ${user.email}`, err);
     });
 
-    this.logger.log(`Signup: ${user.email} → org ${org.id} (email verification pending)`);
+    this.logger.log(
+      `Signup (invite): ${user.email} → org ${org.id} (invite ${dto.inviteCode} consumed)`,
+    );
 
     return {
       accessToken,

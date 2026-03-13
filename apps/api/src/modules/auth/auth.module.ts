@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailService } from '../../common/email/email.service';
+import { InviteModule } from '../invite';
 
 @Global()
 @Module({
@@ -20,6 +21,7 @@ import { EmailService } from '../../common/email/email.service';
       }),
       inject: [ConfigService],
     }),
+    InviteModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, EmailService],

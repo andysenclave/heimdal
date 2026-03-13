@@ -10,6 +10,7 @@ const Users = lazy(() => import('@pages/Users'));
 const Applications = lazy(() => import('@pages/Applications'));
 const Roles = lazy(() => import('@pages/Roles'));
 const Permissions = lazy(() => import('@pages/Permissions'));
+const Invites = lazy(() => import('@pages/Invites'));
 const GuardTester = lazy(() => import('@pages/GuardTester'));
 const AuditLog = lazy(() => import('@pages/AuditLog'));
 const Profile = lazy(() => import('@pages/Profile'));
@@ -48,6 +49,7 @@ const routes: RouteObject[] = [
       { path: 'applications', element: <LazyPage><Applications /></LazyPage> },
       { path: 'roles', element: <LazyPage><Roles /></LazyPage> },
       { path: 'permissions', element: <LazyPage><Permissions /></LazyPage> },
+      { path: 'invites', element: <LazyPage><Invites /></LazyPage> },
       { path: 'guard-tester', element: <LazyPage><GuardTester /></LazyPage> },
       { path: 'audit-log', element: <LazyPage><AuditLog /></LazyPage> },
       { path: 'profile', element: <LazyPage><Profile /></LazyPage> },

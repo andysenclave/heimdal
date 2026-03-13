@@ -79,11 +79,15 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  isHeimdalAdmin Boolean   @default(false)
+
   // Relations
-  memberships   OrgMembership[]
-  userAppRoles  UserAppRole[]
-  sessions      Session[]
-  auditLogs     AuditLog[]
+  memberships      OrgMembership[]
+  userAppRoles     UserAppRole[]
+  sessions         Session[]
+  auditLogs        AuditLog[]
+  invitesSent      Invite[]    @relation("InvitesSent")
+  invitesAccepted  Invite[]    @relation("InviteAccepted")
 
   @@map("users")
 }
@@ -291,4 +295,39 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// Invite — admin invite codes for onboarding
+// ─────────────────────────────────────────────
+
+model Invite {
+  id               String       @id @default(cuid())
+  code             String       @unique   // HMD-XXXXX format (no ambiguous chars)
+  email            String                 // target email address
+  invitedById      String                 // FK → User (the admin who created this invite)
+  status           InviteStatus @default(PENDING)
+  expiresAt        DateTime               // createdAt + 48h
+  acceptedAt       DateTime?
+  acceptedByUserId String?                // FK → User (the user who signed up with this invite)
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relations
+  invitedBy  User  @relation("InvitesSent", fields: [invitedById], references: [id])
+  acceptedBy User? @relation("InviteAccepted", fields: [acceptedByUserId], references: [id])
+
+  @@index([email])
+  @@index([invitedById])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("invites")
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
 }

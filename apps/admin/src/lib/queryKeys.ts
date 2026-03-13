@@ -22,6 +22,10 @@ export const queryKeys = {
   auditLog: {
     list: (filters?: Record<string, unknown>) => ['auditLog', filters] as const,
   },
+  invites: {
+    all: ['invites'] as const,
+    byStatus: (status: string) => ['invites', 'status', status] as const,
+  },
   profile: {
     me: ['profile', 'me'] as const,
   },

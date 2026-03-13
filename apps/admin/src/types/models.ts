@@ -90,3 +90,31 @@ export interface SessionInfo {
   expiresAt: string;
   createdAt: string;
 }
+
+export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+
+export interface Invite {
+  id: string;
+  code: string;
+  email: string;
+  status: InviteStatus;
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+  invitedBy: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+  acceptedBy: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+}
+
+export interface InviteValidation {
+  valid: boolean;
+  email?: string;
+  expiresAt?: string;
+}

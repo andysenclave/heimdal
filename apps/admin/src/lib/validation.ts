@@ -9,6 +9,10 @@ export type LoginFormData = z.infer<typeof loginSchema>;
 
 export const signupSchema = z
   .object({
+    inviteCode: z
+      .string()
+      .min(1, 'Invite code is required')
+      .regex(/^HMD-[A-HJ-NP-Z2-9]{5}$/, 'Invalid invite code format'),
     name: z.string().min(1, 'Name is required').max(100),
     email: z.string().email('Invalid email address'),
     password: z.string().min(8, 'Password must be at least 8 characters').max(72),
