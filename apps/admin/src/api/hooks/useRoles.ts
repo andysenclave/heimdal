@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@api/client';
 import { queryKeys } from '@lib/queryKeys';
-import type { Role } from '@/types/models';
+import type { Role, Permission } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
 async function fetchRoles(appId?: string): Promise<PaginatedResponse<Role>> {
@@ -85,5 +85,58 @@ export function useDeleteRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
     },
+  });
+}
+
+export function useAssignPermissions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      roleId,
+      permissionIds,
+    }: {
+      roleId: string;
+      permissionIds: string[];
+    }) => {
+      return api
+        .post(`admin/roles/${roleId}/permissions`, { json: { permissionIds } })
+        .json<Role>();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+    },
+  });
+}
+
+export function useRemovePermissionFromRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      roleId,
+      permissionId,
+    }: {
+      roleId: string;
+      permissionId: string;
+    }) => {
+      await api.delete(`admin/roles/${roleId}/permissions/${permissionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+    },
+  });
+}
+
+export function useRoleWithPermissions(roleId: string) {
+  return useQuery({
+    queryKey: [...queryKeys.roles.detail(roleId), 'permissions'],
+    queryFn: () =>
+      api
+        .get(`admin/roles/${roleId}`)
+        .json<
+          Role & {
+            rolePermissions?: { permission: Permission }[];
+          }
+        >(),
+    enabled: !!roleId,
   });
 }

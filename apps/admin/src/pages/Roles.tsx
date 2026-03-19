@@ -15,6 +15,7 @@ import type { DecoColumnDef } from '@components/primitives';
 import { PageHeader } from '@components/common/PageHeader';
 import { EmptyState } from '@components/common/EmptyState';
 import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { RolePermissionsPanel } from '@components/sections';
 import {
   useRoles,
   useCreateRole,
@@ -25,6 +26,7 @@ import type { CreateRolePayload, UpdateRolePayload } from '@api/hooks/useRoles';
 import { useOrganizations } from '@api/hooks/useOrganizations';
 import { useApplications } from '@api/hooks/useApplications';
 import { formatDate } from '@lib/format';
+import { extractApiError } from '@lib/errors';
 import { useDebounce } from '@hooks/useDebounce';
 import type { Role } from '@/types/models';
 
@@ -114,8 +116,9 @@ function CreateRoleModal({
       decoToast.success('Role created');
       reset();
       onClose();
-    } catch {
-      decoToast.error('Failed to create role');
+    } catch (err: unknown) {
+      const message = await extractApiError(err, 'Failed to create role');
+      decoToast.error(message);
     }
   };
 
@@ -272,6 +275,7 @@ export default function Roles() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editRole, setEditRole] = useState<Role | null>(null);
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
+  const [permissionsRole, setPermissionsRole] = useState<Role | null>(null);
 
   const debouncedSearch = useDebounce(search, 250);
   const { data, isLoading } = useRoles();
@@ -322,6 +326,8 @@ export default function Roles() {
           <div className="font-mono text-[11px] text-deco-text-dim">{row.id}</div>
         </div>
       ),
+      sortable: true,
+      sortValue: (row) => row.name,
     },
     {
       key: 'parent',
@@ -347,6 +353,17 @@ export default function Roles() {
       className: 'w-[90px]',
     },
     {
+      key: 'permCount',
+      header: 'Perms',
+      cell: (row) => (
+        <DecoBadge variant={row._count?.rolePermissions ? 'teal' : 'muted'} size="sm">
+          {row._count?.rolePermissions ?? 0}
+        </DecoBadge>
+      ),
+      className: 'w-[60px] text-center',
+      headerClassName: 'text-center',
+    },
+    {
       key: 'app',
       header: 'App',
       cell: (row) => (
@@ -365,12 +382,23 @@ export default function Roles() {
         </span>
       ),
       className: 'w-[120px]',
+      sortable: true,
+      sortValue: (row) => new Date(row.createdAt),
     },
     {
       key: 'actions',
       header: '',
       cell: (row) => (
         <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPermissionsRole(row);
+            }}
+            className="rounded px-2 py-1 font-mono text-[10px] text-deco-teal hover:bg-deco-teal/10 transition-colors"
+          >
+            Perms
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -400,7 +428,7 @@ export default function Roles() {
           </button>
         </div>
       ),
-      className: 'w-[120px]',
+      className: 'w-[180px]',
     },
   ];
 
@@ -485,6 +513,14 @@ export default function Roles() {
           open={!!editRole}
           onClose={() => setEditRole(null)}
           role={editRole}
+        />
+      )}
+
+      {permissionsRole && (
+        <RolePermissionsPanel
+          open={!!permissionsRole}
+          onClose={() => setPermissionsRole(null)}
+          role={permissionsRole}
         />
       )}
 

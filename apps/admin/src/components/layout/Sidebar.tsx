@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { cn } from '@lib/cn';
 import { NAV_ITEMS } from '@lib/constants';
 import { useAuth } from '@auth/hooks/useAuth';
@@ -22,9 +22,10 @@ export function Sidebar() {
       <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-deco-amber to-transparent" />
 
       {/* Logo */}
-      <div
+      <Link
+        to="/"
         className={cn(
-          'flex items-center gap-2.5 border-b border-deco-border-dim',
+          'flex items-center gap-2.5 border-b border-deco-border-dim cursor-pointer hover:opacity-80 transition-opacity',
           collapsed ? 'justify-center px-2.5 py-5' : 'px-4 py-5',
         )}
       >
@@ -44,7 +45,7 @@ export function Sidebar() {
             </div>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Nav items */}
       <nav className="flex-1 space-y-0.5 px-2 py-3.5">
@@ -57,40 +58,51 @@ export function Sidebar() {
         </button>
 
         {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === '/'}
-            className={({ isActive }) =>
-              cn(
-                'relative flex w-full items-center rounded transition-all duration-150',
-                collapsed ? 'justify-center py-2.5' : 'gap-2.5 px-3 py-2',
-                isActive
-                  ? 'border border-deco-copper/30 bg-deco-amber/12 font-semibold text-deco-amber'
-                  : 'border border-transparent text-[#999] hover:text-[#ccc]',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {/* Active indicator bar */}
-                {isActive && (
-                  <div className="absolute bottom-[25%] left-0 top-[25%] w-0.5 rounded-sm bg-deco-amber" />
-                )}
-                <span
-                  className={cn(
-                    'w-5 shrink-0 text-center text-[13px]',
-                    isActive ? 'opacity-100' : 'opacity-50',
+          <div key={item.path} className={collapsed ? 'relative group' : ''}>
+            <NavLink
+              to={item.path}
+              end={item.path === '/'}
+              title={collapsed ? item.label : undefined}
+              className={({ isActive }) =>
+                cn(
+                  'relative flex w-full items-center rounded transition-all duration-150',
+                  collapsed ? 'justify-center py-2.5' : 'gap-2.5 px-3 py-2',
+                  isActive
+                    ? 'border border-deco-copper/30 bg-deco-amber/12 font-semibold text-deco-amber'
+                    : 'border border-transparent text-[#999] hover:text-[#ccc]',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {/* Active indicator bar */}
+                  {isActive && (
+                    <div className="absolute bottom-[25%] left-0 top-[25%] w-0.5 rounded-sm bg-deco-amber" />
                   )}
-                >
-                  {item.icon}
-                </span>
-                {!collapsed && (
-                  <span className="text-[13px]">{item.label}</span>
-                )}
-              </>
+                  <span
+                    className={cn(
+                      'w-5 shrink-0 text-center text-[13px]',
+                      isActive ? 'opacity-100' : 'opacity-50',
+                    )}
+                  >
+                    {item.icon}
+                  </span>
+                  {!collapsed && (
+                    <span className="text-[13px]">{item.label}</span>
+                  )}
+                </>
+              )}
+            </NavLink>
+            {/* CSS tooltip when collapsed */}
+            {collapsed && (
+              <div
+                className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-deco-border bg-deco-surface px-2 py-1 font-mono text-[11px] text-deco-text opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+                style={{ pointerEvents: 'none' }}
+              >
+                {item.label}
+              </div>
             )}
-          </NavLink>
+          </div>
         ))}
       </nav>
 

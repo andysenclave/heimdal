@@ -20,6 +20,7 @@ model Organization {
   slug      String   @unique
   plan      String   @default("free")
   isActive  Boolean  @default(true)
+  isSystem  Boolean  @default(false)
   deletedAt DateTime?
 
   createdAt DateTime @default(now())

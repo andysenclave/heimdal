@@ -4,6 +4,7 @@ export interface Organization {
   slug: string;
   plan: string | null;
   isActive: boolean;
+  isSystem?: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -58,6 +59,12 @@ export interface Role {
   parentRole?: Role | null;
   childRoles?: Role[];
   permissions?: Permission[];
+  _count?: {
+    rolePermissions: number;
+    userAppRoles: number;
+    childRoles?: number;
+  };
+  rolePermissions?: { permission: Permission }[];
 }
 
 export interface Permission {

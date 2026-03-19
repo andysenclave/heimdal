@@ -4,6 +4,46 @@ import { queryKeys } from '@lib/queryKeys';
 import type { AuditLogEntry } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
+export interface AuditLogFilters {
+  action?: string;
+  resourceType?: string;
+  actorId?: string;
+}
+
+async function fetchAuditLog(
+  filters?: AuditLogFilters,
+): Promise<PaginatedResponse<AuditLogEntry>> {
+  try {
+    const searchParams: Record<string, string> = {};
+    if (filters?.action) searchParams['action'] = filters.action;
+    if (filters?.resourceType) searchParams['resourceType'] = filters.resourceType;
+    if (filters?.actorId) searchParams['actorId'] = filters.actorId;
+
+    return await api
+      .get('admin/audit/logs', { retry: 0, timeout: 5000, searchParams })
+      .json<PaginatedResponse<AuditLogEntry>>();
+  } catch {
+    // Dev fallback
+    if (import.meta.env.DEV) {
+      let entries = MOCK_AUDIT_LOG;
+      if (filters?.action) {
+        const action = filters.action;
+        entries = entries.filter((e) => e.action.includes(action));
+      }
+      if (filters?.resourceType) {
+        const resourceType = filters.resourceType;
+        entries = entries.filter((e) => e.resourceType === resourceType);
+      }
+      if (filters?.actorId) {
+        const actorId = filters.actorId;
+        entries = entries.filter((e) => e.actorId === actorId);
+      }
+      return { data: entries, total: entries.length, page: 1, pageSize: 50 };
+    }
+    throw new Error('Failed to fetch audit log');
+  }
+}
+
 // Mock data for development when API is unavailable
 const MOCK_AUDIT_LOG: AuditLogEntry[] = [
   {
@@ -349,43 +389,6 @@ const MOCK_AUDIT_LOG: AuditLogEntry[] = [
     },
   },
 ];
-
-export interface AuditLogFilters {
-  action?: string;
-  resourceType?: string;
-  actorId?: string;
-}
-
-async function fetchAuditLog(
-  filters?: AuditLogFilters,
-): Promise<PaginatedResponse<AuditLogEntry>> {
-  try {
-    const searchParams: Record<string, string> = {};
-    if (filters?.action) searchParams.action = filters.action;
-    if (filters?.resourceType) searchParams.resourceType = filters.resourceType;
-    if (filters?.actorId) searchParams.actorId = filters.actorId;
-
-    return await api
-      .get('audit-log', { retry: 0, timeout: 5000, searchParams })
-      .json<PaginatedResponse<AuditLogEntry>>();
-  } catch {
-    // Dev fallback
-    if (import.meta.env.DEV) {
-      let entries = MOCK_AUDIT_LOG;
-      if (filters?.action) {
-        entries = entries.filter((e) => e.action === filters.action);
-      }
-      if (filters?.resourceType) {
-        entries = entries.filter((e) => e.resourceType === filters.resourceType);
-      }
-      if (filters?.actorId) {
-        entries = entries.filter((e) => e.actorId === filters.actorId);
-      }
-      return { data: entries, total: entries.length, page: 1, pageSize: 50 };
-    }
-    throw new Error('Failed to fetch audit log');
-  }
-}
 
 export function useAuditLog(filters?: AuditLogFilters) {
   return useQuery({

@@ -21,9 +21,12 @@ import {
   useInviteMember,
   useUpdateMemberRole,
   useRemoveMember,
+  useTransferOwnership,
 } from '@api/hooks/useUsers';
 import type { InviteMemberPayload, UpdateMemberPayload } from '@api/hooks/useUsers';
+import { useActiveOrg } from '@/context/OrgContext';
 import { formatDate } from '@lib/format';
+import { extractApiError } from '@lib/errors';
 import { useDebounce } from '@hooks/useDebounce';
 import type { OrgMembership } from '@/types/models';
 
@@ -59,9 +62,11 @@ const ROLE_BADGE_VARIANT = {
 function InviteMemberModal({
   open,
   onClose,
+  orgId,
 }: {
   open: boolean;
   onClose: () => void;
+  orgId: string;
 }) {
   const invite = useInviteMember();
   const {
@@ -78,15 +83,16 @@ function InviteMemberModal({
     const payload: InviteMemberPayload = {
       email: data.email,
       role: data.role,
-      orgId: 'org_cuid001',
+      orgId,
     };
     try {
       await invite.mutateAsync(payload);
       decoToast.success(`Invitation sent to ${data.email}`);
       reset();
       onClose();
-    } catch {
-      decoToast.error('Failed to send invitation');
+    } catch (err: unknown) {
+      const message = await extractApiError(err, 'Failed to send invitation');
+      decoToast.error(message);
     }
   };
 
@@ -141,9 +147,18 @@ function ChangeRoleModal({
   member: OrgMembership;
 }) {
   const updateRole = useUpdateMemberRole();
+  const transferOwnership = useTransferOwnership();
   const [selectedRole, setSelectedRole] = useState<UpdateMemberPayload['role']>(member.role);
+  const [confirmTransfer, setConfirmTransfer] = useState(false);
+
+  const isPending = updateRole.isPending || transferOwnership.isPending;
 
   const handleSave = async () => {
+    if (selectedRole === 'owner') {
+      // Show confirmation step
+      setConfirmTransfer(true);
+      return;
+    }
     try {
       await updateRole.mutateAsync({
         orgId: member.orgId,
@@ -157,6 +172,58 @@ function ChangeRoleModal({
     }
   };
 
+  const handleConfirmTransfer = async () => {
+    try {
+      await transferOwnership.mutateAsync({
+        orgId: member.orgId,
+        toUserId: member.userId,
+      });
+      decoToast.success(`Ownership transferred to ${member.user.name ?? member.user.email}`);
+      setConfirmTransfer(false);
+      onClose();
+    } catch {
+      decoToast.error('Failed to transfer ownership');
+    }
+  };
+
+  // Confirmation view
+  if (confirmTransfer) {
+    return (
+      <DecoModal
+        open={open}
+        onClose={() => { setConfirmTransfer(false); onClose(); }}
+        title="Transfer Ownership"
+        footer={
+          <>
+            <DecoButton variant="ghost" onClick={() => setConfirmTransfer(false)}>
+              Cancel
+            </DecoButton>
+            <DecoButton
+              variant="primary"
+              onClick={handleConfirmTransfer}
+              disabled={transferOwnership.isPending}
+            >
+              {transferOwnership.isPending ? 'Transferring...' : 'Transfer Ownership'}
+            </DecoButton>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded border border-deco-amber/30 bg-deco-amber/8 px-3 py-3">
+            <p className="text-[13px] font-semibold text-deco-amber">⚠ Transfer Ownership</p>
+            <p className="mt-1 text-[12px] text-deco-text-soft">
+              Transfer ownership of this organization to{' '}
+              <span className="font-semibold">{member.user.name ?? member.user.email}</span>?
+            </p>
+            <p className="mt-1 text-[12px] text-deco-text-dim">
+              You will be demoted to Admin. This cannot be undone without another transfer.
+            </p>
+          </div>
+        </div>
+      </DecoModal>
+    );
+  }
+
   return (
     <DecoModal
       open={open}
@@ -167,8 +234,16 @@ function ChangeRoleModal({
           <DecoButton variant="ghost" onClick={onClose}>
             Cancel
           </DecoButton>
-          <DecoButton onClick={handleSave} disabled={updateRole.isPending || selectedRole === member.role}>
-            {updateRole.isPending ? 'Saving...' : 'Save'}
+          <DecoButton
+            onClick={handleSave}
+            disabled={isPending || selectedRole === member.role}
+            variant={selectedRole === 'owner' ? 'primary' : 'primary'}
+          >
+            {isPending
+              ? 'Saving...'
+              : selectedRole === 'owner'
+              ? 'Transfer Ownership...'
+              : 'Save'}
           </DecoButton>
         </>
       }
@@ -198,10 +273,15 @@ function ChangeRoleModal({
                   : 'border-deco-border bg-transparent text-deco-text-soft hover:border-deco-border-dim'
               }`}
             >
-              <span className="text-[13px] font-semibold capitalize">{role}</span>
-              <DecoBadge variant={ROLE_BADGE_VARIANT[role]} size="sm">
-                {role}
-              </DecoBadge>
+              <div>
+                <span className="text-[13px] font-semibold capitalize">{role}</span>
+                {role === 'owner' && (
+                  <span className="ml-2 font-mono text-[10px] text-deco-amber">
+                    (requires transfer)
+                  </span>
+                )}
+              </div>
+              <DecoBadge variant={ROLE_BADGE_VARIANT[role]} size="sm">{role}</DecoBadge>
             </button>
           ))}
         </div>
@@ -219,8 +299,9 @@ export default function Users() {
   const [changeRoleMember, setChangeRoleMember] = useState<OrgMembership | null>(null);
   const [removeMember, setRemoveMember] = useState<OrgMembership | null>(null);
 
+  const { activeOrg } = useActiveOrg();
   const debouncedSearch = useDebounce(search, 250);
-  const { data, isLoading } = useMembers('org_cuid001');
+  const { data, isLoading } = useMembers(activeOrg?.id ?? '');
   const removeMemberMutation = useRemoveMember();
 
   const members = data?.data ?? [];
@@ -340,6 +421,27 @@ export default function Users() {
     );
   }
 
+  if (!activeOrg) {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title="Users"
+          subtitle="Organization members"
+          action={
+            <DecoButton disabled>
+              + Invite Member
+            </DecoButton>
+          }
+        />
+        <EmptyState
+          icon="⊕"
+          title="Select an organization"
+          message="Choose an organization from the header to view its members"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -406,7 +508,11 @@ export default function Users() {
       )}
 
       {/* Modals */}
-      <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      <InviteMemberModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        orgId={activeOrg?.id ?? ''}
+      />
 
       {changeRoleMember && (
         <ChangeRoleModal

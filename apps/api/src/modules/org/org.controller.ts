@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { OrgService } from './org.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { HeimdalJwtClaims } from '@heimdal/shared';
 
 @ApiTags('admin/orgs')
 @ApiBearerAuth()
@@ -40,9 +42,21 @@ export class OrgController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Soft-delete organization' })
+  @ApiOperation({ summary: 'Delete (soft) an organization' })
   @ApiResponse({ status: 200, description: 'Organization soft-deleted' })
-  async remove(@Param('id') id: string) {
-    return this.orgService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() user: HeimdalJwtClaims) {
+    return this.orgService.remove(id, user.sub);
+  }
+
+  @Post(':orgId/transfer-ownership')
+  @ApiOperation({ summary: 'Transfer org ownership to another member' })
+  @ApiResponse({ status: 200, description: 'Ownership transferred' })
+  async transferOwnership(
+    @Param('orgId') orgId: string,
+    @Body('toUserId') toUserId: string,
+    @CurrentUser() user: HeimdalJwtClaims,
+  ) {
+    await this.orgService.transferOwnership(orgId, user.sub, toUserId);
+    return { success: true };
   }
 }

@@ -11,6 +11,7 @@ import { InviteModule } from './modules/invite';
 import { GuardModule } from './modules/guard';
 import { CmsModule } from './modules/cms';
 import { AuditModule } from './modules/audit';
+import { DashboardModule } from './modules/dashboard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     GuardModule,
     CmsModule,
     AuditModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [

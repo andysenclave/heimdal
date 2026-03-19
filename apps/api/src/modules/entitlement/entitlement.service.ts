@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -13,7 +14,7 @@ import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 
 const ROLE_INCLUDE = {
   parentRole: { select: { id: true, name: true } },
-  _count: { select: { rolePermissions: true, userAppRoles: true } },
+  _count: { select: { rolePermissions: true, userAppRoles: true, childRoles: true } },
 } as const;
 
 @Injectable()
@@ -86,9 +87,22 @@ export class EntitlementService {
   }
 
   async deleteRole(id: string) {
-    const role = await this.getRole(id);
-    if (role.isSystem) throw new BadRequestException('System roles cannot be deleted');
-    return this.prisma.role.delete({ where: { id } });
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      include: { ...ROLE_INCLUDE, childRoles: { select: { id: true } } },
+    });
+    if (!role) throw new NotFoundException(`Role "${id}" not found`);
+    if (role.isSystem) throw new ForbiddenException('System roles cannot be deleted');
+
+    // Re-parent child roles before deletion to avoid FK constraint issues
+    if (role.childRoles && role.childRoles.length > 0) {
+      await this.prisma.role.updateMany({
+        where: { parentRoleId: id },
+        data: { parentRoleId: role.parentRoleId ?? null },
+      });
+    }
+
+    return this.prisma.role.delete({ where: { id }, include: ROLE_INCLUDE });
   }
 
   // ─── Permissions ──────────────────────────────────────────────────────────

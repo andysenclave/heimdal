@@ -14,6 +14,7 @@ export const queryKeys = {
     detail: (id: string) => ['roles', id] as const,
   },
   permissions: {
+    all: ['permissions', 'all'] as const,
     byApp: (appId: string) => ['permissions', 'app', appId] as const,
   },
   users: {
@@ -28,5 +29,8 @@ export const queryKeys = {
   },
   profile: {
     me: ['profile', 'me'] as const,
+  },
+  dashboard: {
+    stats: ['dashboard', 'stats'] as const,
   },
 };

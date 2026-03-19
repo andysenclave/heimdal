@@ -2,14 +2,19 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma';
+import { AuditService } from '../audit';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
 
 @Injectable()
 export class OrgService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async create(dto: CreateOrgDto) {
     const slug = dto.slug ?? this.slugify(dto.name);
@@ -19,7 +24,7 @@ export class OrgService {
       throw new ConflictException(`Organization with slug "${slug}" already exists`);
     }
 
-    return this.prisma.organization.create({
+    const result = await this.prisma.organization.create({
       data: {
         name: dto.name,
         slug,
@@ -27,6 +32,15 @@ export class OrgService {
       },
       include: { _count: { select: { applications: true, memberships: true } } },
     });
+
+    this.auditService.log({
+      action: 'org.create',
+      resourceType: 'Organization',
+      resourceId: result.id,
+      metadata: { name: result.name, slug: result.slug },
+    }).catch(() => {});
+
+    return result;
   }
 
   async findAll() {
@@ -51,7 +65,11 @@ export class OrgService {
   }
 
   async update(id: string, dto: UpdateOrgDto) {
-    await this.findOne(id);
+    const org = await this.findOne(id);
+    // @ts-expect-error isSystem pending migration - schema change adds this field
+    if (org.isSystem && (dto.name !== undefined || dto.slug !== undefined)) {
+      throw new ForbiddenException('System organization name and slug cannot be modified');
+    }
 
     if (dto.slug) {
       const existing = await this.prisma.organization.findFirst({
@@ -62,21 +80,96 @@ export class OrgService {
       }
     }
 
-    return this.prisma.organization.update({
+    const result = await this.prisma.organization.update({
       where: { id },
       data: dto,
       include: { _count: { select: { applications: true, memberships: true } } },
     });
+
+    this.auditService.log({
+      action: 'org.update',
+      resourceType: 'Organization',
+      resourceId: result.id,
+      metadata: { changes: dto },
+    }).catch(() => {});
+
+    return result;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, currentUserId?: string) {
+    const org = await this.findOne(id);
+    // @ts-expect-error isSystem pending migration - schema change adds this field
+    if (org.isSystem) {
+      throw new ForbiddenException('System organization cannot be deleted');
+    }
 
-    return this.prisma.organization.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-      include: { _count: { select: { applications: true, memberships: true } } },
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      // Soft-delete the org
+      const deleted = await tx.organization.update({
+        where: { id },
+        data: { deletedAt: new Date(), isActive: false },
+        include: { _count: { select: { applications: true, memberships: true } } },
+      });
+
+      // FIX-04: Session invalidation for users whose only org is this one
+      if (currentUserId !== undefined) {
+        const memberships = await tx.orgMembership.findMany({
+          where: { orgId: id },
+          select: { userId: true },
+        });
+        const memberUserIds = memberships.map((m) => m.userId);
+
+        // Find users who have no other org memberships (single query instead of N+1 loop)
+        const usersWithOtherOrgs = await tx.orgMembership.groupBy({
+          by: ['userId'],
+          where: { userId: { in: memberUserIds }, orgId: { not: id } },
+        });
+        const usersWithOtherOrgIds = new Set(usersWithOtherOrgs.map((u) => u.userId));
+        const orphanedUserIds = memberUserIds.filter((uid) => !usersWithOtherOrgIds.has(uid));
+
+        if (orphanedUserIds.length > 0) {
+          await tx.session.deleteMany({ where: { userId: { in: orphanedUserIds } } });
+        }
+      }
+
+      return deleted;
     });
+
+    this.auditService.log({
+      action: 'org.delete',
+      resourceType: 'Organization',
+      resourceId: deleted.id,
+      metadata: { name: deleted.name },
+    }).catch(() => {});
+
+    return deleted;
+  }
+
+  async transferOwnership(orgId: string, fromUserId: string, toUserId: string): Promise<void> {
+    const currentOwnerMembership = await this.prisma.orgMembership.findFirst({
+      where: { orgId, userId: fromUserId, role: 'owner' },
+    });
+    if (!currentOwnerMembership) {
+      throw new ForbiddenException('Only the current organization owner can transfer ownership');
+    }
+
+    const targetMembership = await this.prisma.orgMembership.findFirst({
+      where: { orgId, userId: toUserId },
+    });
+    if (!targetMembership) {
+      throw new NotFoundException('Target user is not a member of this organization');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.orgMembership.update({
+        where: { id: currentOwnerMembership.id },
+        data: { role: 'admin' },
+      }),
+      this.prisma.orgMembership.update({
+        where: { id: targetMembership.id },
+        data: { role: 'owner' },
+      }),
+    ]);
   }
 
   private slugify(name: string): string {

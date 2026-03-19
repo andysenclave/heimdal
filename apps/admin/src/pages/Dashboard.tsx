@@ -3,6 +3,7 @@ import { DecoCard, DecoStatCard, DecoBadge, DecoButton } from '@components/primi
 import { MiniBarChart } from '@components/charts/MiniBarChart';
 import { PageHeader } from '@components/common/PageHeader';
 import { ROUTES } from '@lib/constants';
+import { useDashboardStats } from '@api/hooks/useDashboard';
 
 // Sample data — will be replaced with real API data
 const guardCallsData = [
@@ -33,6 +34,7 @@ const recentDecisions = [
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { data: stats } = useDashboardStats();
 
   return (
     <div className="space-y-6 animate-deco-fade-in">
@@ -40,9 +42,27 @@ export default function Dashboard() {
 
       {/* Stat cards row */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <DecoStatCard label="Organizations" value="3" icon="◇" accent="amber" />
-        <DecoStatCard label="Applications" value="5" icon="⬡" accent="teal" />
-        <DecoStatCard label="Users" value="24" icon="○" accent="purple" />
+        <DecoStatCard
+          label="Organizations"
+          value={String(stats?.orgCount ?? '...')}
+          icon="◇"
+          accent="amber"
+          onClick={() => navigate(ROUTES.ORGANIZATIONS)}
+        />
+        <DecoStatCard
+          label="Applications"
+          value={String(stats?.appCount ?? '...')}
+          icon="⬡"
+          accent="teal"
+          onClick={() => navigate(ROUTES.APPLICATIONS)}
+        />
+        <DecoStatCard
+          label="Users"
+          value={String(stats?.userCount ?? '...')}
+          icon="○"
+          accent="purple"
+          onClick={() => navigate(ROUTES.USERS)}
+        />
         <DecoStatCard label="Guard Checks (24h)" value="1,247" icon="⊡" accent="green" />
       </div>
 

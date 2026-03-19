@@ -9,6 +9,7 @@ import {
   DecoBadge,
   DecoModal,
   DecoTextarea,
+  DecoSelect,
   decoToast,
 } from '@components/primitives';
 import type { DecoColumnDef } from '@components/primitives';
@@ -22,6 +23,8 @@ import {
   useDeletePermission,
 } from '@api/hooks/usePermissions';
 import type { CreatePermPayload, UpdatePermPayload } from '@api/hooks/usePermissions';
+import { useApplications } from '@api/hooks/useApplications';
+import { useActiveOrg } from '@/context/OrgContext';
 import { formatDate } from '@lib/format';
 import { useDebounce } from '@hooks/useDebounce';
 import type { Permission } from '@/types/models';
@@ -33,6 +36,7 @@ const PERM_PATTERN = /^[a-z]+:[a-z]+$/;
 const createPermSchema = z.object({
   domain: z.string().min(1, 'Domain is required').regex(/^[a-z]+$/, 'Lowercase letters only'),
   action: z.string().min(1, 'Action is required').regex(/^[a-z]+$/, 'Lowercase letters only'),
+  appId: z.string().min(1, 'Application is required'),
   description: z.string().optional(),
 });
 
@@ -60,11 +64,16 @@ function uniqueDomains(permissions: Permission[]): string[] {
 function CreatePermModal({
   open,
   onClose,
+  orgId,
 }: {
   open: boolean;
   onClose: () => void;
+  orgId: string;
 }) {
   const createPerm = useCreatePermission();
+  const { data: appsData } = useApplications(orgId);
+  const apps = appsData?.data ?? [];
+
   const {
     register,
     handleSubmit,
@@ -73,7 +82,7 @@ function CreatePermModal({
     formState: { errors },
   } = useForm<CreatePermForm>({
     resolver: zodResolver(createPermSchema),
-    defaultValues: { domain: '', action: '', description: '' },
+    defaultValues: { domain: '', action: '', appId: '', description: '' },
   });
 
   const domain = watch('domain');
@@ -83,8 +92,8 @@ function CreatePermModal({
     const payload: CreatePermPayload = {
       key: `${data.domain}:${data.action}`,
       description: data.description || null,
-      orgId: 'org_cuid001',
-      appId: 'app_ck7f801',
+      orgId,
+      appId: data.appId,
     };
     try {
       await createPerm.mutateAsync(payload);
@@ -135,6 +144,18 @@ function CreatePermModal({
             {domain || '•••'}:{action || '•••'}
           </span>
         </div>
+        <DecoSelect
+          label="Application"
+          {...register('appId')}
+          error={errors.appId?.message}
+        >
+          <option value="">Select application...</option>
+          {apps.map((app) => (
+            <option key={app.id} value={app.id}>
+              {app.name}
+            </option>
+          ))}
+        </DecoSelect>
         <DecoTextarea
           label="Description"
           placeholder="What does this permission grant?"
@@ -222,6 +243,7 @@ export default function Permissions() {
   const [editPerm, setEditPerm] = useState<Permission | null>(null);
   const [deletePerm, setDeletePerm] = useState<Permission | null>(null);
 
+  const { activeOrg } = useActiveOrg();
   const debouncedSearch = useDebounce(search, 250);
   const { data, isLoading } = usePermissions();
   const deletePermMutation = useDeletePermission();
@@ -270,6 +292,8 @@ export default function Permissions() {
           </div>
         );
       },
+      sortable: true,
+      sortValue: (row) => row.key,
     },
     {
       key: 'domain',
@@ -310,6 +334,8 @@ export default function Permissions() {
         </span>
       ),
       className: 'w-[120px]',
+      sortable: true,
+      sortValue: (row) => new Date(row.createdAt),
     },
     {
       key: 'actions',
@@ -344,6 +370,27 @@ export default function Permissions() {
     return (
       <div className="flex items-center justify-center p-12">
         <div className="h-6 w-6 rounded-full border-2 border-deco-amber border-t-transparent animate-deco-spin" />
+      </div>
+    );
+  }
+
+  if (!activeOrg) {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title="Permissions"
+          subtitle="Permission keys · format: domain:action"
+          action={
+            <DecoButton disabled>
+              + Create Permission
+            </DecoButton>
+          }
+        />
+        <EmptyState
+          icon="◆"
+          title="Select an organization"
+          message="Choose an organization from the header to view its permissions"
+        />
       </div>
     );
   }
@@ -424,7 +471,11 @@ export default function Permissions() {
       )}
 
       {/* Modals */}
-      <CreatePermModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreatePermModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        orgId={activeOrg?.id ?? ''}
+      />
 
       {editPerm && (
         <EditPermModal

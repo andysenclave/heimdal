@@ -242,3 +242,15 @@ export function useRemoveMember() {
     },
   });
 }
+
+export function useTransferOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, toUserId }: { orgId: string; toUserId: string }) => {
+      await api.post(`orgs/${orgId}/transfer-ownership`, { json: { toUserId } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}

@@ -38,7 +38,7 @@ async function deletePermission(id: string): Promise<void> {
 
 export function usePermissions(appId?: string) {
   return useQuery({
-    queryKey: appId ? queryKeys.permissions.byApp(appId) : queryKeys.permissions.byApp('all'),
+    queryKey: appId ? queryKeys.permissions.byApp(appId) : queryKeys.permissions.all,
     queryFn: () => fetchPermissions(appId),
   });
 }
