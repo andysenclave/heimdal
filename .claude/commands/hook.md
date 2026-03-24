@@ -1,0 +1,1 @@
+Read the coding prompt at docs/coding-prompts/01-when-to-extract-a-hook.md and apply its patterns. When creating a new hook or deciding whether to extract logic into a hook, follow those guidelines exactly. Name hooks as use{Domain}{Action}, keep them JSX-free, and ensure they can be described in one sentence without mentioning UI.

@@ -1,0 +1,512 @@
+openapi: 3.1.0
+info:
+  title: Heimdal Admin API
+  description: Organization, application, user, and RBAC management endpoints.
+  version: 0.1.0
+  contact:
+    name: Thimple Engineering
+
+servers:
+  - url: https://staging.heimdal.thimple.in/api/v1
+    description: Staging
+  - url: https://heimdal.thimple.in/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+paths:
+  # ─── Organizations ────────────────────────────
+  /admin/orgs:
+    post:
+      operationId: createOrg
+      summary: Create organization
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Thimple
+                plan:
+                  type: string
+                  enum: [free, pro, enterprise]
+                  default: free
+      responses:
+        '201':
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+    get:
+      operationId: listOrgs
+      summary: List organizations
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+
+  /admin/orgs/{orgId}:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getOrg
+      summary: Get organization
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '404':
+          description: Not found
+    patch:
+      operationId: updateOrg
+      summary: Update organization
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                plan:
+                  type: string
+      responses:
+        '200':
+          description: Updated
+    delete:
+      operationId: deleteOrg
+      summary: Soft-delete organization
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Soft-deleted
+
+  # ─── Applications ─────────────────────────────
+  /admin/orgs/{orgId}/apps:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: registerApp
+      summary: Register application in org
+      tags: [Applications]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Mimir
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Application registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  appId:
+                    type: string
+                    description: Public identifier
+                    example: app_mimir_staging
+                  appSecret:
+                    type: string
+                    description: Secret (shown only once)
+    get:
+      operationId: listApps
+      summary: List apps in org
+      tags: [Applications]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Application'
+
+  # ─── Members ──────────────────────────────────
+  /admin/orgs/{orgId}/members:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: listMembers
+      summary: List org members
+      tags: [Members]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrgMembership'
+    post:
+      operationId: inviteMember
+      summary: Invite user to org
+      tags: [Members]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [owner, admin, member]
+      responses:
+        '201':
+          description: Member invited
+
+  # ─── Roles ────────────────────────────────────
+  /admin/apps/{appId}/roles:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: createRole
+      summary: Create role in app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: user
+                description:
+                  type: string
+                parentRoleId:
+                  type: string
+                  description: Parent role for hierarchy
+                isSystem:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Role created
+    get:
+      operationId: listRoles
+      summary: List roles for app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of roles
+
+  # ─── Permissions ──────────────────────────────
+  /admin/apps/{appId}/permissions:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: createPermission
+      summary: Create permission in app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key:
+                  type: string
+                  pattern: '^[a-z]+:[a-z]+$'
+                  description: 'domain:action format'
+                  example: 'trade:execute'
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Permission created
+    get:
+      operationId: listPermissions
+      summary: List permissions for app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of permissions
+
+  # ─── Role-Permission assignment ───────────────
+  /admin/roles/{roleId}/permissions:
+    parameters:
+      - name: roleId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: assignPermissions
+      summary: Assign permissions to role
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissionIds]
+              properties:
+                permissionIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Permissions assigned
+
+  # ─── User-App-Role assignment ─────────────────
+  /admin/apps/{appId}/users/{userId}/roles:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: assignUserRole
+      summary: Assign role to user in app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleId]
+              properties:
+                roleId:
+                  type: string
+      responses:
+        '200':
+          description: Role assigned
+
+  # ─── Access Bindings ──────────────────────────
+  /admin/apps/{appId}/bindings:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: createBinding
+      summary: Create access binding
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissionId, resource]
+              properties:
+                permissionId:
+                  type: string
+                resource:
+                  type: string
+                  example: 'POST /api/trades'
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Binding created
+    get:
+      operationId: listBindings
+      summary: List access bindings
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of bindings
+
+  # ─── Entitlement resolution ───────────────────
+  /admin/apps/{appId}/users/{userId}/entitlements:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: resolveEntitlements
+      summary: Resolve effective permissions for user in app
+      tags: [RBAC]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Effective permission set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      type: string
+                  roles:
+                    type: array
+                    items:
+                      type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        plan:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Application:
+      type: object
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        name:
+          type: string
+        appId:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    OrgMembership:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        orgId:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member]
+        createdAt:
+          type: string
+          format: date-time

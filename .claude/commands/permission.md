@@ -1,0 +1,1 @@
+Read docs/coding-prompts/11-how-to-design-a-permission.md before creating new permissions. Format is domain:action (lowercase only, regex /^[a-z]+:[a-z]+$/). Validate with isValidPermission() from @heimdal/shared. No dots, hyphens, uppercase, or wildcards. Prefer granular over broad. Check existing permissions before creating duplicates.

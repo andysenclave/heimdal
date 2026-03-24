@@ -1,0 +1,290 @@
+// Heimdal IAM Platform — Prisma Schema
+// All core entities for auth, org, RBAC, guard, and audit.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Organization — multi-tenant root entity
+// ─────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  isActive  Boolean  @default(true)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  applications  Application[]
+  memberships   OrgMembership[]
+  roles         Role[]
+  permissions   Permission[]
+  auditLogs     AuditLog[]
+
+  @@map("organizations")
+}
+
+// ─────────────────────────────────────────────
+// Application — registered app within an org
+// ─────────────────────────────────────────────
+
+model Application {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  appId       String   @unique  // Public identifier (e.g., app_mimir_staging)
+  appSecret   String            // Hashed secret
+  description String?
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  org             Organization    @relation(fields: [orgId], references: [id])
+  roles           Role[]
+  permissions     Permission[]
+  userAppRoles    UserAppRole[]
+  accessBindings  AccessBinding[]
+
+  @@index([orgId])
+  @@map("applications")
+}
+
+// ─────────────────────────────────────────────
+// User — authenticated identity
+// ─────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  emailVerified Boolean  @default(false)
+  image         String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  memberships   OrgMembership[]
+  userAppRoles  UserAppRole[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// OrgMembership — user's membership in an org
+// ─────────────────────────────────────────────
+
+model OrgMembership {
+  id     String @id @default(cuid())
+  userId String
+  orgId  String
+  role   OrgRole @default(member)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User         @relation(fields: [userId], references: [id])
+  org  Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("org_memberships")
+}
+
+enum OrgRole {
+  owner
+  admin
+  member
+}
+
+// ─────────────────────────────────────────────
+// Role — app-scoped role with optional hierarchy
+// ─────────────────────────────────────────────
+
+model Role {
+  id           String  @id @default(cuid())
+  orgId        String
+  appId        String
+  name         String
+  description  String?
+  isSystem     Boolean @default(false)
+  parentRoleId String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  org             Organization     @relation(fields: [orgId], references: [id])
+  app             Application      @relation(fields: [appId], references: [id])
+  parentRole      Role?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  childRoles      Role[]           @relation("RoleHierarchy")
+  rolePermissions RolePermission[]
+  userAppRoles    UserAppRole[]
+
+  @@unique([appId, name])
+  @@index([orgId])
+  @@index([appId])
+  @@index([parentRoleId])
+  @@map("roles")
+}
+
+// ─────────────────────────────────────────────
+// Permission — app-scoped permission (domain:action)
+// ─────────────────────────────────────────────
+
+model Permission {
+  id          String  @id @default(cuid())
+  orgId       String
+  appId       String
+  key         String          // domain:action format (e.g., "trade:execute")
+  description String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  org             Organization     @relation(fields: [orgId], references: [id])
+  app             Application      @relation(fields: [appId], references: [id])
+  rolePermissions RolePermission[]
+  accessBindings  AccessBinding[]
+
+  @@unique([appId, key])
+  @@index([orgId])
+  @@index([appId])
+  @@map("permissions")
+}
+
+// ─────────────────────────────────────────────
+// RolePermission — many-to-many: role ↔ permission
+// ─────────────────────────────────────────────
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  createdAt    DateTime @default(now())
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ─────────────────────────────────────────────
+// UserAppRole — user assigned to role in app context
+// ─────────────────────────────────────────────
+
+model UserAppRole {
+  id     String @id @default(cuid())
+  userId String
+  appId  String
+  roleId String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app  Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  role Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appId, roleId])
+  @@index([userId])
+  @@index([appId])
+  @@index([roleId])
+  @@map("user_app_roles")
+}
+
+// ─────────────────────────────────────────────
+// AccessBinding — map permission to resource pattern
+// ─────────────────────────────────────────────
+
+model AccessBinding {
+  id           String @id @default(cuid())
+  appId        String
+  permissionId String
+  resource     String        // e.g., "POST /api/trades" or "GET /api/portfolio/:id"
+  description  String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  app        Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  permission Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, permissionId, resource])
+  @@index([appId])
+  @@index([appId, resource])
+  @@map("access_bindings")
+}
+
+// ─────────────────────────────────────────────
+// Session — authenticated session (BetterAuth managed)
+// ─────────────────────────────────────────────
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────
+// AuditLog — immutable event log
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  orgId        String?
+  actorId      String?
+  action       String          // e.g., "auth.login", "guard.check", "org.create"
+  resourceType String?         // e.g., "User", "Organization", "Role"
+  resourceId   String?
+  metadata     Json?
+  ipAddress    String?
+
+  createdAt    DateTime @default(now())
+
+  // Relations
+  org   Organization? @relation(fields: [orgId], references: [id])
+  actor User?         @relation(fields: [actorId], references: [id])
+
+  @@index([orgId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
