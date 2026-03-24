@@ -9,6 +9,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_001',
     orgId: 'org_cuid001',
     role: 'owner',
+    appId: null,
+    apps: [],
     createdAt: '2025-11-01T10:00:00Z',
     user: {
       id: 'user_001',
@@ -24,6 +26,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_002',
     orgId: 'org_cuid001',
     role: 'admin',
+    appId: null,
+    apps: [],
     createdAt: '2025-11-05T08:00:00Z',
     user: {
       id: 'user_002',
@@ -39,6 +43,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_003',
     orgId: 'org_cuid001',
     role: 'member',
+    appId: null,
+    apps: [],
     createdAt: '2025-12-01T14:00:00Z',
     user: {
       id: 'user_003',
@@ -54,6 +60,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_004',
     orgId: 'org_cuid001',
     role: 'member',
+    appId: null,
+    apps: [],
     createdAt: '2026-01-10T09:00:00Z',
     user: {
       id: 'user_004',
@@ -69,6 +77,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_005',
     orgId: 'org_cuid001',
     role: 'member',
+    appId: null,
+    apps: [],
     createdAt: '2026-01-20T11:00:00Z',
     user: {
       id: 'user_005',
@@ -84,6 +94,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_006',
     orgId: 'org_cuid001',
     role: 'admin',
+    appId: null,
+    apps: [],
     createdAt: '2026-02-05T15:00:00Z',
     user: {
       id: 'user_006',
@@ -99,6 +111,8 @@ const MOCK_MEMBERS: OrgMembership[] = [
     userId: 'user_007',
     orgId: 'org_cuid001',
     role: 'member',
+    appId: null,
+    apps: [],
     createdAt: '2026-02-15T12:00:00Z',
     user: {
       id: 'user_007',
@@ -115,7 +129,7 @@ const MOCK_MEMBERS: OrgMembership[] = [
 async function fetchMembers(orgId: string): Promise<PaginatedResponse<OrgMembership>> {
   try {
     return await api
-      .get(`orgs/${orgId}/members`, { retry: 0, timeout: 5000 })
+      .get(`admin/orgs/${orgId}/members`, { retry: 0, timeout: 5000 })
       .json<PaginatedResponse<OrgMembership>>();
   } catch {
     if (import.meta.env.DEV) {
@@ -146,6 +160,8 @@ async function inviteMember(payload: InviteMemberPayload): Promise<OrgMembership
       const member: OrgMembership = {
         userId: `user_${Date.now()}`,
         orgId: payload.orgId,
+        appId: null,
+    apps: [],
         role: payload.role,
         createdAt: new Date().toISOString(),
         user: {
@@ -172,7 +188,7 @@ async function updateMemberRole(
 ): Promise<OrgMembership> {
   try {
     return await api
-      .patch(`orgs/${orgId}/members/${userId}`, { json: payload })
+      .patch(`admin/orgs/${orgId}/members/${userId}`, { json: payload })
       .json<OrgMembership>();
   } catch {
     if (import.meta.env.DEV) {
@@ -188,7 +204,7 @@ async function updateMemberRole(
 
 async function removeMember(orgId: string, userId: string): Promise<void> {
   try {
-    await api.delete(`orgs/${orgId}/members/${userId}`);
+    await api.delete(`admin/orgs/${orgId}/members/${userId}`);
   } catch {
     if (import.meta.env.DEV) {
       const idx = MOCK_MEMBERS.findIndex((m) => m.userId === userId);
@@ -247,7 +263,7 @@ export function useTransferOwnership() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ orgId, toUserId }: { orgId: string; toUserId: string }) => {
-      await api.post(`orgs/${orgId}/transfer-ownership`, { json: { toUserId } });
+      await api.post(`admin/orgs/${orgId}/transfer-ownership`, { json: { toUserId } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });

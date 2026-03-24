@@ -1,10 +1,16 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { ROUTES } from '@lib/constants';
+import type { HeimdalRole } from '@heimdal/shared';
 import type { ReactNode } from 'react';
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+interface ProtectedRouteProps {
+  children: ReactNode;
+  requiredRole?: HeimdalRole;
+}
+
+export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, session } = useAuth();
 
   if (isLoading) {
     return (
@@ -16,6 +22,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (requiredRole && session?.systemRole !== requiredRole) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
   return <>{children}</>;

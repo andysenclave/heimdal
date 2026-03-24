@@ -25,6 +25,9 @@ import {
 import type { CreatePermPayload, UpdatePermPayload } from '@api/hooks/usePermissions';
 import { useApplications } from '@api/hooks/useApplications';
 import { useActiveOrg } from '@/context/OrgContext';
+import { useActiveApp } from '@/context/AppContext';
+import { useFeatureAccess } from '@auth/hooks/useRoleGate';
+import { AppSelector } from '@components/sections';
 import { formatDate } from '@lib/format';
 import { useDebounce } from '@hooks/useDebounce';
 import type { Permission } from '@/types/models';
@@ -65,10 +68,14 @@ function CreatePermModal({
   open,
   onClose,
   orgId,
+  prefilledAppId,
+  prefilledAppName,
 }: {
   open: boolean;
   onClose: () => void;
   orgId: string;
+  prefilledAppId?: string;
+  prefilledAppName?: string;
 }) {
   const createPerm = useCreatePermission();
   const { data: appsData } = useApplications(orgId);
@@ -82,7 +89,7 @@ function CreatePermModal({
     formState: { errors },
   } = useForm<CreatePermForm>({
     resolver: zodResolver(createPermSchema),
-    defaultValues: { domain: '', action: '', appId: '', description: '' },
+    defaultValues: { domain: '', action: '', appId: prefilledAppId ?? '', description: '' },
   });
 
   const domain = watch('domain');
@@ -93,7 +100,7 @@ function CreatePermModal({
       key: `${data.domain}:${data.action}`,
       description: data.description || null,
       orgId,
-      appId: data.appId,
+      appId: prefilledAppId ?? data.appId,
     };
     try {
       await createPerm.mutateAsync(payload);
@@ -105,14 +112,16 @@ function CreatePermModal({
     }
   };
 
+  const handleClose = () => { reset(); onClose(); };
+
   return (
     <DecoModal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Create Permission"
       footer={
         <>
-          <DecoButton variant="ghost" onClick={onClose}>
+          <DecoButton variant="ghost" onClick={handleClose}>
             Cancel
           </DecoButton>
           <DecoButton onClick={handleSubmit(onSubmit)} disabled={createPerm.isPending}>
@@ -144,18 +153,32 @@ function CreatePermModal({
             {domain || '•••'}:{action || '•••'}
           </span>
         </div>
-        <DecoSelect
-          label="Application"
-          {...register('appId')}
-          error={errors.appId?.message}
-        >
-          <option value="">Select application...</option>
-          {apps.map((app) => (
-            <option key={app.id} value={app.id}>
-              {app.name}
-            </option>
-          ))}
-        </DecoSelect>
+
+        {/* App — read-only when pre-filled, dropdown otherwise */}
+        {prefilledAppId ? (
+          <div className="space-y-1">
+            <label className="font-mono text-[11px] uppercase tracking-deco-wide text-deco-text-dim">
+              Application
+            </label>
+            <div className="rounded border border-deco-border bg-deco-bg px-3 py-2 font-mono text-xs text-deco-teal">
+              {prefilledAppName ?? prefilledAppId}
+            </div>
+          </div>
+        ) : (
+          <DecoSelect
+            label="Application"
+            {...register('appId')}
+            error={errors.appId?.message}
+          >
+            <option value="">Select application...</option>
+            {apps.map((app) => (
+              <option key={app.id} value={app.id}>
+                {app.name}
+              </option>
+            ))}
+          </DecoSelect>
+        )}
+
         <DecoTextarea
           label="Description"
           placeholder="What does this permission grant?"
@@ -244,8 +267,10 @@ export default function Permissions() {
   const [deletePerm, setDeletePerm] = useState<Permission | null>(null);
 
   const { activeOrg } = useActiveOrg();
+  const { activeApp } = useActiveApp();
+  const { canWritePermissions, canDeletePermissions } = useFeatureAccess();
   const debouncedSearch = useDebounce(search, 250);
-  const { data, isLoading } = usePermissions();
+  const { data, isLoading } = usePermissions(activeApp?.id, activeOrg?.id);
   const deletePermMutation = useDeletePermission();
 
   const permissions = data?.data ?? [];
@@ -340,28 +365,33 @@ export default function Permissions() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditPerm(row);
-            }}
-            className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-soft hover:bg-deco-surface-hover hover:text-deco-amber transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeletePerm(row);
-            }}
-            className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-dim hover:bg-deco-red/10 hover:text-deco-red transition-colors"
-          >
-            Delete
-          </button>
-        </div>
-      ),
+      cell: (row) => {
+        if (!canWritePermissions) return null;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditPerm(row);
+              }}
+              className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-soft hover:bg-deco-surface-hover hover:text-deco-amber transition-colors"
+            >
+              Edit
+            </button>
+            {canDeletePermissions && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeletePerm(row);
+                }}
+                className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-dim hover:bg-deco-red/10 hover:text-deco-red transition-colors"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        );
+      },
       className: 'w-[120px]',
     },
   ];
@@ -381,9 +411,10 @@ export default function Permissions() {
           title="Permissions"
           subtitle="Permission keys · format: domain:action"
           action={
-            <DecoButton disabled>
-              + Create Permission
-            </DecoButton>
+            <div className="flex items-center gap-2">
+              <AppSelector />
+              {canWritePermissions && <DecoButton disabled>+ Create Permission</DecoButton>}
+            </div>
           }
         />
         <EmptyState
@@ -401,9 +432,14 @@ export default function Permissions() {
         title="Permissions"
         subtitle={`Permission keys · format: domain:action · ${permissions.length} total`}
         action={
-          <DecoButton onClick={() => setCreateOpen(true)}>
-            + Create Permission
-          </DecoButton>
+          <div className="flex items-center gap-2">
+            <AppSelector />
+            {canWritePermissions && (
+              <DecoButton onClick={() => setCreateOpen(true)}>
+                + Create Permission
+              </DecoButton>
+            )}
+          </div>
         }
       />
 
@@ -475,6 +511,8 @@ export default function Permissions() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         orgId={activeOrg?.id ?? ''}
+        prefilledAppId={activeApp?.id}
+        prefilledAppName={activeApp?.name}
       />
 
       {editPerm && (

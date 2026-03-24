@@ -25,6 +25,7 @@ import {
 } from '@api/hooks/useApplications';
 import type { CreateAppPayload, UpdateAppPayload, CreatedApplication } from '@api/hooks/useApplications';
 import { useOrganizations } from '@api/hooks/useOrganizations';
+import { useActiveOrg } from '@/context/OrgContext';
 import { ROUTES } from '@lib/constants';
 import { formatDate } from '@lib/format';
 import { useDebounce } from '@hooks/useDebounce';
@@ -271,8 +272,9 @@ export default function Applications() {
   const [editApp, setEditApp] = useState<Application | null>(null);
   const [deleteApp, setDeleteApp] = useState<Application | null>(null);
 
+  const { activeOrg } = useActiveOrg();
   const debouncedSearch = useDebounce(search, 250);
-  const { data, isLoading } = useApplications();
+  const { data, isLoading } = useApplications(activeOrg?.id);
   const deleteAppMutation = useDeleteApplication();
 
   const apps = data?.data ?? [];

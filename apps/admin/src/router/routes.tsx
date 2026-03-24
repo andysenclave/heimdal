@@ -1,7 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, type RouteObject } from 'react-router-dom';
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@auth/ProtectedRoute';
+import { useSession } from '@auth/hooks/useSession';
 import { ROUTES } from '@lib/constants';
+import { HEIMDAL_ROLES } from '@heimdal/shared';
+import type { ReactNode } from 'react';
 
 const RootLayout = lazy(() => import('@components/layout/RootLayout'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
@@ -17,6 +20,16 @@ const Profile = lazy(() => import('@pages/Profile'));
 const Login = lazy(() => import('@pages/Login'));
 const Signup = lazy(() => import('@pages/Signup'));
 const NotFound = lazy(() => import('@pages/NotFound'));
+
+/**
+ * Redirects org members (role: 'member') to /roles.
+ * Platform admins and org owners/admins pass through freely.
+ */
+function NotForOrgMember({ children }: { children: ReactNode }) {
+  const { isOrgMember } = useSession();
+  if (isOrgMember) return <Navigate to={ROUTES.ROLES} replace />;
+  return <>{children}</>;
+}
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -43,15 +56,64 @@ const routes: RouteObject[] = [
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <LazyPage><Dashboard /></LazyPage> },
-      { path: 'organizations', element: <LazyPage><Organizations /></LazyPage> },
-      { path: 'users', element: <LazyPage><Users /></LazyPage> },
-      { path: 'applications', element: <LazyPage><Applications /></LazyPage> },
+      {
+        index: true,
+        element: (
+          <NotForOrgMember>
+            <LazyPage><Dashboard /></LazyPage>
+          </NotForOrgMember>
+        ),
+      },
+      {
+        path: 'organizations',
+        element: (
+          <ProtectedRoute requiredRole={HEIMDAL_ROLES.PLATFORM_ADMIN}>
+            <LazyPage><Organizations /></LazyPage>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'users',
+        element: (
+          <NotForOrgMember>
+            <LazyPage><Users /></LazyPage>
+          </NotForOrgMember>
+        ),
+      },
+      {
+        path: 'applications',
+        element: (
+          <NotForOrgMember>
+            <LazyPage><Applications /></LazyPage>
+          </NotForOrgMember>
+        ),
+      },
       { path: 'roles', element: <LazyPage><Roles /></LazyPage> },
       { path: 'permissions', element: <LazyPage><Permissions /></LazyPage> },
-      { path: 'invites', element: <LazyPage><Invites /></LazyPage> },
-      { path: 'guard-tester', element: <LazyPage><GuardTester /></LazyPage> },
-      { path: 'audit-log', element: <LazyPage><AuditLog /></LazyPage> },
+      {
+        path: 'invites',
+        element: (
+          <NotForOrgMember>
+            <LazyPage><Invites /></LazyPage>
+          </NotForOrgMember>
+        ),
+      },
+      {
+        path: 'guard-tester',
+        element: (
+          <NotForOrgMember>
+            <LazyPage><GuardTester /></LazyPage>
+          </NotForOrgMember>
+        ),
+      },
+      {
+        path: 'audit-log',
+        element: (
+          <ProtectedRoute requiredRole={HEIMDAL_ROLES.PLATFORM_ADMIN}>
+            <LazyPage><AuditLog /></LazyPage>
+          </ProtectedRoute>
+        ),
+      },
       { path: 'profile', element: <LazyPage><Profile /></LazyPage> },
     ],
   },

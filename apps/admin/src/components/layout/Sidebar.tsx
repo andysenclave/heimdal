@@ -2,13 +2,40 @@ import { useState } from 'react';
 import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { cn } from '@lib/cn';
 import { NAV_ITEMS } from '@lib/constants';
+import { HEIMDAL_ROLES } from '@heimdal/shared';
 import { useAuth } from '@auth/hooks/useAuth';
+import { useFeatureAccess } from '@auth/hooks/useRoleGate';
+import { useSession } from '@auth/hooks/useSession';
 import { DecoAvatar } from '@components/primitives';
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { session } = useAuth();
+  const { systemRole } = useSession();
+  const features = useFeatureAccess();
   const navigate = useNavigate();
+
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    switch (item.path) {
+      case '/':               return features.canSeeDashboard;
+      case '/organizations':  return features.canSeeOrganizations;
+      case '/users':          return features.canSeeUsers;
+      case '/applications':   return features.canSeeApplications;
+      case '/roles':          return features.canSeeRoles;
+      case '/permissions':    return features.canSeePermissions;
+      case '/invites':        return features.canSeeInvites;
+      case '/guard-tester':   return features.canSeeGuardTester;
+      case '/audit-log':      return features.canSeeAuditLog;
+      default:                return true;
+    }
+  });
+
+  const roleLabel =
+    systemRole === HEIMDAL_ROLES.PLATFORM_ADMIN
+      ? 'Platform Admin'
+      : features.canSeeDashboard
+      ? 'Org Admin'
+      : 'Org Member';
 
   return (
     <aside
@@ -57,7 +84,7 @@ export function Sidebar() {
           {collapsed ? '▸' : '◂ collapse'}
         </button>
 
-        {NAV_ITEMS.map((item) => (
+        {visibleNavItems.map((item) => (
           <div key={item.path} className={collapsed ? 'relative group' : ''}>
             <NavLink
               to={item.path}
@@ -121,7 +148,7 @@ export function Sidebar() {
               {session.name ?? session.email?.split('@')[0]}
             </div>
             <div className="font-mono text-[10px] text-deco-copper">
-              {session.roles[0] ?? 'member'}
+              {roleLabel}
             </div>
           </div>
         )}

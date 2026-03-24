@@ -66,7 +66,6 @@ export class OrgService {
 
   async update(id: string, dto: UpdateOrgDto) {
     const org = await this.findOne(id);
-    // @ts-expect-error isSystem pending migration - schema change adds this field
     if (org.isSystem && (dto.name !== undefined || dto.slug !== undefined)) {
       throw new ForbiddenException('System organization name and slug cannot be modified');
     }
@@ -98,7 +97,6 @@ export class OrgService {
 
   async remove(id: string, currentUserId?: string) {
     const org = await this.findOne(id);
-    // @ts-expect-error isSystem pending migration - schema change adds this field
     if (org.isSystem) {
       throw new ForbiddenException('System organization cannot be deleted');
     }
@@ -143,6 +141,116 @@ export class OrgService {
     }).catch(() => {});
 
     return deleted;
+  }
+
+  async getMembers(orgId: string) {
+    const rows = await this.prisma.orgMembership.findMany({
+      where: { orgId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            emailVerified: true,
+            image: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        app: {
+          select: { id: true, name: true, appId: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Aggregate: one entry per user, collecting all their app associations.
+    // A user invited multiple times (for different apps) has multiple rows.
+    type AppRef = { id: string; name: string; appId: string };
+    type AggRow = (typeof rows)[0] & { apps: AppRef[] };
+
+    const userMap = new Map<string, AggRow>();
+    for (const row of rows) {
+      if (!userMap.has(row.userId)) {
+        userMap.set(row.userId, { ...row, apps: row.app ? [row.app] : [] });
+      } else {
+        if (row.app) userMap.get(row.userId)!.apps.push(row.app);
+      }
+    }
+
+    const data = [...userMap.values()];
+    return { data, total: data.length, page: 1, pageSize: 50 };
+  }
+
+  async updateMemberRole(
+    orgId: string,
+    userId: string,
+    role: 'owner' | 'admin' | 'member',
+    currentUserId: string,
+  ) {
+    if (userId === currentUserId) {
+      throw new ForbiddenException('You cannot change your own role');
+    }
+
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { orgId, userId },
+    });
+    if (!membership) {
+      throw new NotFoundException('Member not found in this organization');
+    }
+
+    const updated = await this.prisma.orgMembership.update({
+      where: { id: membership.id },
+      data: { role },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            emailVerified: true,
+            image: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    this.auditService.log({
+      action: 'org.member.role_updated',
+      resourceType: 'OrgMembership',
+      resourceId: membership.id,
+      metadata: { orgId, userId, role },
+    }).catch(() => {});
+
+    return updated;
+  }
+
+  async removeMember(orgId: string, userId: string, currentUserId: string): Promise<void> {
+    if (userId === currentUserId) {
+      throw new ForbiddenException('You cannot remove yourself from the organization');
+    }
+
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { orgId, userId },
+    });
+    if (!membership) {
+      throw new NotFoundException('Member not found in this organization');
+    }
+    if (membership.role === 'owner') {
+      throw new ForbiddenException('Cannot remove the organization owner');
+    }
+
+    await this.prisma.orgMembership.delete({ where: { id: membership.id } });
+
+    this.auditService.log({
+      action: 'org.member.removed',
+      resourceType: 'OrgMembership',
+      resourceId: membership.id,
+      metadata: { orgId, userId },
+    }).catch(() => {});
   }
 
   async transferOwnership(orgId: string, fromUserId: string, toUserId: string): Promise<void> {

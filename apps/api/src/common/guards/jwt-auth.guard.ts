@@ -44,6 +44,13 @@ export class JwtAuthGuard implements CanActivate {
       });
       // Attach claims to request for downstream use (@CurrentUser() decorator)
       (request as Request & { user: HeimdalJwtClaims }).user = claims;
+
+      // SDK app tokens (aud starts with 'app_') are only valid for SDK endpoints.
+      // All admin/auth endpoints must reject them — SDK users cannot access Heimdal admin.
+      if (claims.aud.startsWith('app_')) {
+        throw new UnauthorizedException('App-scoped tokens cannot access this endpoint');
+      }
+
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
