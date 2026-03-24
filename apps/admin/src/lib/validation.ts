@@ -7,6 +7,24 @@ export const loginSchema = z.object({
 
 export type LoginFormData = z.infer<typeof loginSchema>;
 
+export const signupSchema = z
+  .object({
+    inviteCode: z
+      .string()
+      .min(1, 'Invite code is required')
+      .regex(/^HMD-[A-HJ-NP-Z2-9]{5}$/, 'Invalid invite code format'),
+    name: z.string().min(1, 'Name is required').max(100),
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters').max(72),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export type SignupFormData = z.infer<typeof signupSchema>;
+
 export const createOrgSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens').optional(),

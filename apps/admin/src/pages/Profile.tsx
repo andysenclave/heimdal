@@ -15,6 +15,7 @@ import {
 } from '@components/primitives';
 import { PageHeader } from '@components/common/PageHeader';
 import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { useOrganization } from '@api/hooks/useOrganizations';
 import { formatDate, formatRelative } from '@lib/format';
 import type { SessionInfo } from '@/types/models';
 
@@ -101,6 +102,7 @@ const DEVICE_ICONS: Record<string, string> = {
 
 export default function Profile() {
   const { session, signOut } = useAuth();
+  const { data: userOrg } = useOrganization(session?.orgId ?? '');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [revokeSession, setRevokeSession] = useState<SessionInfo | null>(null);
@@ -200,7 +202,7 @@ export default function Profile() {
                 <InfoRow label="User ID" value={session.id} mono />
                 <InfoRow label="Email" value={session.email} />
                 <InfoRow label="Display Name" value={session.name ?? '—'} />
-                <InfoRow label="Organization" value={session.orgId} mono />
+                <InfoRow label="Organization" value={userOrg?.name ?? session.orgId ?? 'Unknown'} />
               </div>
             )}
           </div>

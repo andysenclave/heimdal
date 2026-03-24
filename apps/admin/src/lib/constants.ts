@@ -6,9 +6,11 @@ export const ROUTES = {
   ROLES: '/roles',
   PERMISSIONS: '/permissions',
   GUARD_TESTER: '/guard-tester',
+  INVITES: '/invites',
   AUDIT_LOG: '/audit-log',
   PROFILE: '/profile',
   LOGIN: '/login',
+  SIGNUP: '/signup',
 } as const;
 
 export const NAV_ITEMS = [
@@ -18,6 +20,7 @@ export const NAV_ITEMS = [
   { path: ROUTES.APPLICATIONS, icon: '⬡', label: 'Applications' },
   { path: ROUTES.ROLES, icon: '△', label: 'Roles' },
   { path: ROUTES.PERMISSIONS, icon: '◆', label: 'Permissions' },
+  { path: ROUTES.INVITES, icon: '✉', label: 'Invites' },
   { path: ROUTES.GUARD_TESTER, icon: '⊡', label: 'Guard Tester' },
   { path: ROUTES.AUDIT_LOG, icon: '≡', label: 'Audit Log' },
   { path: ROUTES.PROFILE, icon: '○', label: 'Profile' },

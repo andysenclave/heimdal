@@ -7,6 +7,13 @@
 
 // --- Constants ---
 
+export const HEIMDAL_ROLES = {
+  PLATFORM_ADMIN: 'heimdal-admin',
+  ORG_ADMIN: 'org-admin',
+} as const;
+
+export type HeimdalRole = (typeof HEIMDAL_ROLES)[keyof typeof HEIMDAL_ROLES];
+
 export const API_VERSION = 'v1';
 export const API_PREFIX = `api/${API_VERSION}`;
 

@@ -1,47 +1,457 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ConflictException,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
+import { randomBytes, createHash } from 'node:crypto';
+import { PrismaService } from '../../common/prisma';
+import { EmailService } from '../../common/email/email.service';
+import { InviteService } from '../invite/invite.service';
+import type { HeimdalJwtClaims, HeimdalRole } from '@heimdal/shared';
+import { HEIMDAL_ROLES } from '@heimdal/shared';
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+
+const BCRYPT_ROUNDS = 12;
+const REFRESH_TOKEN_BYTES = 48;
+const REFRESH_TTL_DAYS = 7;
+const VERIFY_TOKEN_BYTES = 32;
+const VERIFY_TTL_HOURS = 24;
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  /**
-   * Register a new user.
-   * Full BetterAuth integration in HD-010 (Week 2).
-   */
-  async signup(_body: Record<string, unknown>) {
-    this.logger.log('Signup endpoint called — stub');
-    return { message: 'Auth module ready. BetterAuth integration pending (HD-010).' };
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly email: EmailService,
+    private readonly inviteService: InviteService,
+  ) {}
+
+  // ─── Signup (invite-gated) ───────────────────────────────────────────────
+
+  async signup(dto: SignupDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) {
+      throw new ConflictException('Email is already registered');
+    }
+
+    const hashed = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
+    const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
+
+    // Transaction: validate invite → create User → Org/Membership → consume invite → Session
+    const { user, orgId, session, accessToken, refreshToken } = await this.prisma.$transaction(
+      async (tx) => {
+        // Validate invite code inside the transaction to prevent race conditions
+        const invite = await this.inviteService.consumeInvite(dto.inviteCode, dto.email, tx);
+
+        // Invited to a specific org → org-admin; no specific org → bootstrap platform admin
+        const isHeimdalAdmin = !invite.orgId;
+
+        const user = await tx.user.create({
+          data: {
+            email: dto.email,
+            name: dto.name,
+            password: hashed,
+            emailVerified: false,
+            emailVerificationToken: verificationToken,
+            emailVerificationExpiry: verificationExpiry,
+            isHeimdalAdmin,
+          },
+        });
+
+        // Mark invite as accepted
+        await this.inviteService.markAccepted(invite.id, user.id, tx);
+
+        let orgId: string;
+
+        if (invite.orgId) {
+          // Invited to specific org: join as the role specified in the invite
+          await tx.orgMembership.create({
+            data: {
+              userId: user.id,
+              orgId: invite.orgId,
+              role: invite.orgRole,
+              appId: invite.appId ?? null,  // member-scoped app access
+            },
+          });
+          orgId = invite.orgId;
+        } else {
+          // Bootstrap / platform-admin invite: auto-create personal org
+          const orgSlug = this.slugify(dto.name ?? dto.email.split('@')[0]);
+          const org = await tx.organization.create({
+            data: {
+              name: dto.name ? `${dto.name}'s Org` : dto.email.split('@')[0],
+              slug: await this.uniqueSlug(orgSlug, tx),
+            },
+          });
+          await tx.orgMembership.create({
+            data: { userId: user.id, orgId: org.id, role: 'owner' },
+          });
+          orgId = org.id;
+        }
+
+        const aud = isHeimdalAdmin ? 'heimdal-admin' : orgId;
+        const { accessToken, refreshToken, hashedRefresh, expiresAt } =
+          await this.generateTokenPair(user.id, orgId, aud, [isHeimdalAdmin ? 'owner' : invite.orgRole]);
+
+        const session = await tx.session.create({
+          data: { userId: user.id, token: hashedRefresh, expiresAt },
+        });
+
+        return { user, orgId, session, accessToken, refreshToken };
+      },
+    );
+
+    // Fire verification email outside the transaction (non-blocking failure)
+    this.email.sendVerificationEmail(user.email, verificationToken).catch((err: unknown) => {
+      this.logger.error(`Failed to send verification email to ${user.email}`, err);
+    });
+
+    this.logger.log(
+      `Signup: ${user.email} → org ${orgId} (invite ${dto.inviteCode} consumed, isHeimdalAdmin: ${user.isHeimdalAdmin})`,
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        orgId,
+        emailVerified: false,
+      },
+      sessionId: session.id,
+    };
   }
 
-  /**
-   * Authenticate user with email/password.
-   */
-  async login(_body: Record<string, unknown>) {
-    this.logger.log('Login endpoint called — stub');
-    return { message: 'Auth module ready. BetterAuth integration pending (HD-010).' };
+  // ─── Verify Email ─────────────────────────────────────────────────────────
+
+  async verifyEmail(token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { emailVerificationToken: token },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    if (!user.emailVerificationExpiry || user.emailVerificationExpiry < new Date()) {
+      throw new BadRequestException('Verification token has expired. Please request a new one.');
+    }
+
+    if (user.emailVerified) {
+      // Idempotent — already verified, just clear the token and return success
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerificationToken: null, emailVerificationExpiry: null },
+      });
+      return { message: 'Email already verified' };
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpiry: null,
+      },
+    });
+
+    this.logger.log(`Email verified: ${user.email}`);
+    return { message: 'Email verified successfully' };
   }
 
-  /**
-   * Invalidate the current session.
-   */
-  async logout() {
-    this.logger.log('Logout endpoint called — stub');
-    return { message: 'Logged out (stub)' };
+  // ─── Resend Verification ─────────────────────────────────────────────────
+
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+
+    // Always return success — don't leak whether the email exists
+    if (!user || user.emailVerified) {
+      return { message: 'If that email exists and is unverified, a new link has been sent.' };
+    }
+
+    const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
+    const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationToken: verificationToken,
+        emailVerificationExpiry: verificationExpiry,
+      },
+    });
+
+    this.email.sendVerificationEmail(user.email, verificationToken).catch((err: unknown) => {
+      this.logger.error(`Failed to resend verification email to ${user.email}`, err);
+    });
+
+    this.logger.log(`Resent verification email: ${user.email}`);
+    return { message: 'If that email exists and is unverified, a new link has been sent.' };
   }
 
-  /**
-   * Refresh the access token using refresh token.
-   */
-  async refresh(_body: Record<string, unknown>) {
-    this.logger.log('Refresh endpoint called — stub');
-    return { message: 'Token refresh (stub)' };
+  // ─── Login ───────────────────────────────────────────────────────────────
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (!user?.password) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Resolve primary org
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!membership) {
+      throw new UnauthorizedException('User has no organization membership');
+    }
+
+    const { roles } = await this.resolveRoles(user.id, membership.orgId, dto.appId);
+    // Platform admins get 'heimdal-admin' audience; org-admins are scoped to their org
+    const aud = dto.appId ?? (user.isHeimdalAdmin ? 'heimdal-admin' : membership.orgId);
+
+    const { accessToken, refreshToken, hashedRefresh, expiresAt } = await this.generateTokenPair(
+      user.id,
+      membership.orgId,
+      aud,
+      roles,
+    );
+
+    const session = await this.prisma.session.create({
+      data: { userId: user.id, token: hashedRefresh, expiresAt },
+    });
+
+    this.logger.log(`Login: ${user.email} → org ${membership.orgId} aud ${aud}`);
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        orgId: membership.orgId,
+        emailVerified: user.emailVerified,
+      },
+      sessionId: session.id,
+    };
   }
 
-  /**
-   * Get the current authenticated session.
-   */
-  async getSession() {
-    this.logger.log('Get session endpoint called — stub');
-    return { message: 'Session (stub)' };
+  // ─── Refresh ─────────────────────────────────────────────────────────────
+
+  async refresh(dto: RefreshDto) {
+    const hashedToken = this.hashRefreshToken(dto.refreshToken);
+
+    const session = await this.prisma.session.findUnique({ where: { token: hashedToken } });
+    if (!session || session.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token is invalid or expired');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    try {
+      const membership = await this.prisma.orgMembership.findFirst({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!membership) throw new Error('No membership');
+
+      const { roles } = await this.resolveRoles(user.id, membership.orgId, undefined);
+      const aud = user.isHeimdalAdmin ? 'heimdal-admin' : membership.orgId;
+      const { accessToken, refreshToken, hashedRefresh, expiresAt } = await this.generateTokenPair(
+        user.id,
+        membership.orgId,
+        aud,
+        roles,
+      );
+
+      // Rotate refresh token
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { token: hashedRefresh, expiresAt },
+      });
+
+      this.logger.log(`Refresh: user ${user.id}`);
+      return { accessToken, refreshToken, sessionId: session.id };
+    } catch {
+      throw new UnauthorizedException('Could not refresh token');
+    }
+  }
+
+  // ─── Logout ──────────────────────────────────────────────────────────────
+
+  async logout(dto: RefreshDto) {
+    const hashedToken = this.hashRefreshToken(dto.refreshToken);
+    await this.prisma.session.deleteMany({ where: { token: hashedToken } });
+    this.logger.log('Logout: session invalidated');
+    return { message: 'Logged out successfully' };
+  }
+
+  // ─── Get Session ─────────────────────────────────────────────────────────
+
+  async getSession(claims: HeimdalJwtClaims) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: claims.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        emailVerified: true,
+        isHeimdalAdmin: true,
+        createdAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const systemRole: HeimdalRole = user.isHeimdalAdmin
+      ? HEIMDAL_ROLES.PLATFORM_ADMIN
+      : HEIMDAL_ROLES.ORG_ADMIN;
+
+    // Get the user's bound org details
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        org: { select: { id: true, name: true, slug: true } },
+        app: { select: { id: true, name: true, appId: true } },
+      },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.emailVerified,
+        isHeimdalAdmin: user.isHeimdalAdmin,
+        createdAt: user.createdAt,
+      },
+      session: {
+        id: claims.sessionId,
+        orgId: claims.org,
+        aud: claims.aud,
+        roles: claims.roles,
+        expiresAt: new Date(claims.exp * 1000).toISOString(),
+      },
+      systemRole,
+      org: membership?.org ?? null,
+      // Populated only for org members; null for owners/admins whose OrgMembership.appId is null
+      boundApp: membership?.app ?? null,
+    };
+  }
+
+  // ─── Internal helpers ─────────────────────────────────────────────────────
+
+  private async generateTokenPair(
+    userId: string,
+    orgId: string,
+    aud: string,
+    roles: string[],
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    hashedRefresh: string;
+    expiresAt: Date;
+  }> {
+    const sessionId = randomBytes(16).toString('hex');
+    const jti = randomBytes(16).toString('hex');
+
+    // iss is set via JwtModule signOptions.issuer — don't duplicate in payload
+    const payload: Omit<HeimdalJwtClaims, 'exp' | 'iat' | 'iss'> = {
+      sub: userId,
+      aud,
+      org: orgId,
+      roles,
+      sessionId,
+      jti,
+    };
+
+    const accessToken = this.jwt.sign(payload);
+
+    const refreshToken = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
+    const hashedRefresh = this.hashRefreshToken(refreshToken);
+    const expiresAt = new Date(Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    return { accessToken, refreshToken, hashedRefresh, expiresAt };
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async resolveRoles(
+    userId: string,
+    orgId: string,
+    appId: string | undefined,
+  ): Promise<{ roles: string[]; isHeimdalAdmin: boolean }> {
+    const [userRecord, membership] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { isHeimdalAdmin: true } }),
+      this.prisma.orgMembership.findUnique({ where: { userId_orgId: { userId, orgId } } }),
+    ]);
+
+    const orgRole = membership?.role ?? 'member';
+
+    if (!appId) {
+      return { roles: [orgRole], isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false };
+    }
+
+    // dto.appId is the public appId string (e.g. "app_mimir").
+    // UserAppRole.appId stores the internal Application.id — resolve first.
+    const app = await this.prisma.application.findUnique({ where: { appId } });
+    if (!app) {
+      return { roles: [orgRole], isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false };
+    }
+
+    const appRoles = await this.prisma.userAppRole.findMany({
+      where: { userId, appId: app.id },
+      include: { role: { select: { name: true } } },
+    });
+
+    const roleNames = appRoles.map((r) => r.role.name);
+    return {
+      roles: [orgRole, ...roleNames],
+      isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false,
+    };
+  }
+
+  private slugify(name: string): string {
+    return name
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, '-')
+      .replaceAll(/^-|-$/g, '');
+  }
+
+  private async uniqueSlug(
+    base: string,
+    tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+  ): Promise<string> {
+    let slug = base;
+    let attempt = 0;
+    while (true) {
+      const exists = await tx.organization.findUnique({ where: { slug } });
+      if (!exists) return slug;
+      attempt++;
+      slug = `${base}-${attempt}`;
+    }
   }
 }

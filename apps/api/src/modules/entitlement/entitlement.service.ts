@@ -1,66 +1,289 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { PrismaService } from '../../common/prisma';
+import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
+import { CreatePermissionDto } from './dto/create-permission.dto';
+import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { AssignPermissionsDto } from './dto/assign-permissions.dto';
+
+const ROLE_INCLUDE = {
+  baseRole: { select: { id: true, name: true } },
+  _count: { select: { rolePermissions: true, userAppRoles: true, derivedRoles: true } },
+} as const;
 
 @Injectable()
 export class EntitlementService {
-  private readonly logger = new Logger(EntitlementService.name);
+  constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * RBAC engine — Full implementation in Week 3 (HD-018 through HD-023).
-   * Stubs below preserve the API surface.
-   */
+  // ─── Roles ────────────────────────────────────────────────────────────────
 
-  async createRole(appId: string, _body: Record<string, unknown>) {
-    this.logger.log(`Create role in app ${appId} — stub`);
-    return { message: 'Entitlement module ready. Role CRUD pending (HD-018).' };
+  async createRole(appId: string, dto: CreateRoleDto) {
+    const app = await this.prisma.application.findUnique({ where: { id: appId } });
+    if (!app) throw new NotFoundException(`Application "${appId}" not found`);
+
+    const existing = await this.prisma.role.findUnique({
+      where: { appId_name: { appId, name: dto.name } },
+    });
+    if (existing) {
+      throw new ConflictException(`Role "${dto.name}" already exists in this application`);
+    }
+
+    if (dto.baseRoleId) {
+      const base = await this.prisma.role.findUnique({ where: { id: dto.baseRoleId } });
+      if (!base) throw new NotFoundException(`Base role "${dto.baseRoleId}" not found`);
+      if (base.appId !== appId)
+        throw new BadRequestException('Base role must belong to the same application');
+    }
+
+    return this.prisma.role.create({
+      data: {
+        orgId: dto.orgId,
+        appId,
+        name: dto.name,
+        description: dto.description,
+        baseRoleId: dto.baseRoleId,
+        isSystem: dto.isSystem ?? false,
+      },
+      include: ROLE_INCLUDE,
+    });
   }
 
-  async listRoles(appId: string) {
-    this.logger.log(`List roles for app ${appId} — stub`);
-    return [];
+  async listRoles(appId?: string, orgId?: string) {
+    return this.prisma.role.findMany({
+      where: {
+        ...(appId ? { appId } : {}),
+        ...(orgId ? { orgId } : {}),
+      },
+      include: ROLE_INCLUDE,
+      orderBy: [{ appId: 'asc' }, { name: 'asc' }],
+    });
   }
 
-  async createPermission(appId: string, _body: Record<string, unknown>) {
-    this.logger.log(`Create permission in app ${appId} — stub`);
-    return { message: 'Permission CRUD pending (HD-019).' };
+  async getRole(id: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      include: ROLE_INCLUDE,
+    });
+    if (!role) throw new NotFoundException(`Role "${id}" not found`);
+    return role;
   }
 
-  async listPermissions(appId: string) {
-    this.logger.log(`List permissions for app ${appId} — stub`);
-    return [];
+  async updateRole(id: string, dto: UpdateRoleDto) {
+    const role = await this.getRole(id);
+
+    if (dto.name && dto.name !== role.name) {
+      const conflict = await this.prisma.role.findUnique({
+        where: { appId_name: { appId: role.appId, name: dto.name } },
+      });
+      if (conflict) {
+        throw new ConflictException(`Role "${dto.name}" already exists in this application`);
+      }
+    }
+
+    return this.prisma.role.update({ where: { id }, data: dto, include: ROLE_INCLUDE });
   }
 
-  async assignPermissions(roleId: string, _body: Record<string, unknown>) {
-    this.logger.log(`Assign permissions to role ${roleId} — stub`);
-    return { message: 'Role-Permission assignment pending (HD-020).' };
+  async deleteRole(id: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      include: { ...ROLE_INCLUDE, derivedRoles: { select: { id: true } } },
+    });
+    if (!role) throw new NotFoundException(`Role "${id}" not found`);
+    if (role.isSystem) throw new ForbiddenException('System roles cannot be deleted');
+
+    // Re-base derived roles before deletion to avoid FK constraint issues
+    if (role.derivedRoles && role.derivedRoles.length > 0) {
+      await this.prisma.role.updateMany({
+        where: { baseRoleId: id },
+        data: { baseRoleId: role.baseRoleId ?? null },
+      });
+    }
+
+    return this.prisma.role.delete({ where: { id }, include: ROLE_INCLUDE });
   }
 
-  async assignUserRole(appId: string, userId: string, _body: Record<string, unknown>) {
-    this.logger.log(`Assign role to user ${userId} in app ${appId} — stub`);
-    return { message: 'User-App-Role assignment pending (HD-021).' };
+  // ─── Permissions ──────────────────────────────────────────────────────────
+
+  async createPermission(appId: string, dto: CreatePermissionDto) {
+    const app = await this.prisma.application.findUnique({ where: { id: appId } });
+    if (!app) throw new NotFoundException(`Application "${appId}" not found`);
+
+    const existing = await this.prisma.permission.findUnique({
+      where: { appId_key: { appId, key: dto.key } },
+    });
+    if (existing) {
+      throw new ConflictException(`Permission "${dto.key}" already exists in this application`);
+    }
+
+    return this.prisma.permission.create({
+      data: { orgId: dto.orgId, appId, key: dto.key, description: dto.description },
+    });
   }
 
-  async createBinding(appId: string, _body: Record<string, unknown>) {
-    this.logger.log(`Create binding in app ${appId} — stub`);
-    return { message: 'Access binding pending (HD-023).' };
+  async listPermissions(appId?: string, orgId?: string) {
+    return this.prisma.permission.findMany({
+      where: {
+        ...(appId ? { appId } : {}),
+        ...(orgId ? { orgId } : {}),
+      },
+      orderBy: [{ appId: 'asc' }, { key: 'asc' }],
+    });
+  }
+
+  async getPermission(id: string) {
+    const perm = await this.prisma.permission.findUnique({ where: { id } });
+    if (!perm) throw new NotFoundException(`Permission "${id}" not found`);
+    return perm;
+  }
+
+  async updatePermission(id: string, dto: UpdatePermissionDto) {
+    await this.getPermission(id);
+    return this.prisma.permission.update({ where: { id }, data: dto });
+  }
+
+  async deletePermission(id: string) {
+    await this.getPermission(id);
+    return this.prisma.permission.delete({ where: { id } });
+  }
+
+  // ─── Role-Permission assignment ────────────────────────────────────────────
+
+  async assignPermissions(roleId: string, dto: AssignPermissionsDto) {
+    await this.getRole(roleId);
+    await this.prisma.rolePermission.createMany({
+      data: dto.permissionIds.map((permissionId) => ({ roleId, permissionId })),
+      skipDuplicates: true,
+    });
+    return this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: {
+        ...ROLE_INCLUDE,
+        rolePermissions: { include: { permission: true } },
+      },
+    });
+  }
+
+  async removePermissionFromRole(roleId: string, permissionId: string) {
+    await this.getRole(roleId);
+    const assignment = await this.prisma.rolePermission.findUnique({
+      where: { roleId_permissionId: { roleId, permissionId } },
+    });
+    if (!assignment) {
+      throw new NotFoundException(`Permission not assigned to role`);
+    }
+    return this.prisma.rolePermission.delete({
+      where: { roleId_permissionId: { roleId, permissionId } },
+    });
+  }
+
+  // ─── User-App-Role assignment ──────────────────────────────────────────────
+
+  async assignUserRole(appId: string, userId: string, roleId: string) {
+    const [app, user, role] = await Promise.all([
+      this.prisma.application.findUnique({ where: { id: appId } }),
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.role.findUnique({ where: { id: roleId } }),
+    ]);
+    if (!app) throw new NotFoundException(`Application "${appId}" not found`);
+    if (!user) throw new NotFoundException(`User "${userId}" not found`);
+    if (!role) throw new NotFoundException(`Role "${roleId}" not found`);
+    if (role.appId !== appId)
+      throw new BadRequestException('Role does not belong to this application');
+
+    return this.prisma.userAppRole.upsert({
+      where: { userId_appId_roleId: { userId, appId, roleId } },
+      create: { userId, appId, roleId },
+      update: {},
+    });
+  }
+
+  // ─── Access bindings ───────────────────────────────────────────────────────
+
+  async createBinding(
+    appId: string,
+    permissionId: string,
+    resource: string,
+    description?: string,
+  ) {
+    const [app, perm] = await Promise.all([
+      this.prisma.application.findUnique({ where: { id: appId } }),
+      this.prisma.permission.findUnique({ where: { id: permissionId } }),
+    ]);
+    if (!app) throw new NotFoundException(`Application "${appId}" not found`);
+    if (!perm) throw new NotFoundException(`Permission "${permissionId}" not found`);
+    if (perm.appId !== appId)
+      throw new BadRequestException('Permission does not belong to this application');
+
+    return this.prisma.accessBinding.create({
+      data: { appId, permissionId, resource, description },
+      include: { permission: true },
+    });
   }
 
   async listBindings(appId: string) {
-    this.logger.log(`List bindings for app ${appId} — stub`);
-    return [];
+    return this.prisma.accessBinding.findMany({
+      where: { appId },
+      include: { permission: true },
+      orderBy: { resource: 'asc' },
+    });
   }
 
-  /**
-   * Resolve effective permissions for userId in appId context.
-   * Direct + inherited (recursive, max depth 5).
-   * Full engine in HD-022.
-   */
-  async resolveEntitlements(appId: string, userId: string) {
-    this.logger.log(`Resolve entitlements for user ${userId} in app ${appId} — stub`);
+  // ─── App users ────────────────────────────────────────────────────────────
+
+  async listAppUsers(appId: string): Promise<{ data: unknown[]; total: number }> {
+    const app = await this.prisma.application.findUnique({ where: { id: appId } });
+    if (!app) throw new NotFoundException(`Application "${appId}" not found`);
+
+    const memberships = await this.prisma.appMembership.findMany({
+      where: { appId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            emailVerified: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const userIds = memberships.map((m) => m.userId);
+    const appRoles = await this.prisma.userAppRole.findMany({
+      where: { userId: { in: userIds }, appId },
+      include: { role: { select: { id: true, name: true } } },
+    });
+
+    const rolesByUser = new Map<string, { id: string; name: string }[]>();
+    for (const uar of appRoles) {
+      const existing = rolesByUser.get(uar.userId) ?? [];
+      existing.push(uar.role);
+      rolesByUser.set(uar.userId, existing);
+    }
+
+    const data = memberships.map((m) => ({
+      id: m.id,
+      userId: m.userId,
+      appId: m.appId,
+      user: m.user,
+      roles: rolesByUser.get(m.userId) ?? [],
+      createdAt: m.createdAt,
+    }));
+
+    return { data, total: data.length };
+  }
+
+  // ─── Entitlement resolution (stub — full engine in HD-022) ────────────────
+
+  async resolveEntitlements(_appId: string, _userId: string) {
     return { permissions: [], message: 'Entitlement resolution engine pending (HD-022).' };
-  }
-
-  async removePermission(roleId: string, permissionId: string) {
-    this.logger.log(`Remove permission ${permissionId} from role ${roleId} — stub`);
-    return { message: 'stub' };
   }
 }

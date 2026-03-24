@@ -1,43 +1,57 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@api/client';
-import type { SessionResponse } from '@api/types';
+import { tokenStore } from '@api/tokenStore';
+import type { AuthUser, SessionResponse } from '@api/types';
+// AuthUser imported for type narrowing of orgMembershipRole
+type OrgMembershipRole = AuthUser['orgMembershipRole'];
 import { AuthContext } from './AuthContext';
 
-const DEV_MOCK_SESSION: SessionResponse['user'] = {
-  id: 'user_dev_mock',
-  email: 'admin@thimple.dev',
-  name: 'Dev Admin',
-  image: null,
-  orgId: 'org_dev_mock',
-  roles: ['super-admin'],
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionResponse['user'] | null>(null);
+  const [session, setSession] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchSession = useCallback(async () => {
+    if (!tokenStore.hasTokens()) {
+      setSession(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const data = await api
-        .get('auth/session', { retry: 0 })
-        .json<SessionResponse>();
-      setSession(data.user);
+      const data = await api.get('auth/session', { retry: 0 }).json<SessionResponse>();
+      // Flatten API response into the AuthUser shape the UI needs
+      // roles[0] is always the OrgMembership role (owner | admin | member)
+      const firstRole = data.session.roles[0];
+      const orgMembershipRole: OrgMembershipRole =
+        firstRole === 'owner' || firstRole === 'admin' ? firstRole : 'member';
+
+      setSession({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        orgId: data.session.orgId,
+        roles: data.session.roles,
+        systemRole: data.systemRole,
+        isHeimdalAdmin: data.user.isHeimdalAdmin,
+        orgMembershipRole,
+        org: data.org,
+        boundApp: data.boundApp ?? null,
+      });
     } catch {
-      // In dev mode, fall back to mock session when API is unavailable
-      if (import.meta.env.DEV) {
-        setSession(DEV_MOCK_SESSION);
-      } else {
-        setSession(null);
-      }
+      setSession(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   const signOut = useCallback(async () => {
+    const refreshToken = tokenStore.getRefreshToken();
     try {
-      await api.post('auth/logout');
+      if (refreshToken) {
+        await api.post('auth/logout', { json: { refreshToken } });
+      }
     } finally {
+      tokenStore.clear();
       setSession(null);
     }
   }, []);

@@ -1,6 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Public } from './common/guards/jwt-auth.guard';
 
+@Public()
 @ApiTags('health')
 @Controller('health')
 export class HealthController {

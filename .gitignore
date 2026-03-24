@@ -142,9 +142,11 @@ vite.config.ts.timestamp-*
 
 # Local env files
 .env.local
+.env.example
+.env.example.local
 
 # IDE
 .vscode
 .idea
 resources/*
-.claude/worktrees
+.claude/*
