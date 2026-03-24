@@ -5,13 +5,15 @@
       "name": "api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "--workspace=@heimdal/api", "dev"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": false
     },
     {
       "name": "admin",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "--workspace=@heimdal/admin", "dev"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": false
     }
   ]
 }

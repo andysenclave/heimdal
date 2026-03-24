@@ -4,6 +4,8 @@ import { useTheme } from '@hooks/useTheme';
 import { useOrganizations } from '@api/hooks/useOrganizations';
 import { useActiveOrg } from '@/context/OrgContext';
 import { useAuth } from '@auth/hooks/useAuth';
+import { useSession } from '@auth/hooks/useSession';
+import { useFeatureAccess } from '@auth/hooks/useRoleGate';
 import { NAV_ITEMS } from '@lib/constants';
 import type { Organization } from '@/types/models';
 
@@ -15,6 +17,8 @@ export function TopBar({ onSearchClick }: TopBarProps) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { isAuthenticated } = useAuth();
+  const { boundOrg } = useSession();
+  const features = useFeatureAccess();
   const { activeOrg, setActiveOrg } = useActiveOrg();
   const { data: orgsData } = useOrganizations();
   const [orgDropdownOpen, setOrgDropdownOpen] = useState(false);
@@ -64,50 +68,57 @@ export function TopBar({ onSearchClick }: TopBarProps) {
           {theme === 'dark' ? 'Dark' : 'Light'}
         </button>
 
-        {/* Org switcher */}
+        {/* Org context — dropdown for platform admins, static label for org-admins */}
         {isAuthenticated && (
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setOrgDropdownOpen((v) => !v)}
-              className="flex items-center gap-1.5 rounded border border-deco-border bg-deco-raised px-3 py-1.5 font-mono text-xs font-semibold transition-colors hover:border-deco-amber/40 hover:text-deco-amber"
-              style={{
-                color: activeOrg ? 'rgb(var(--color-amber))' : 'rgb(var(--color-text-dim))',
-              }}
-            >
-              <span>◇</span>
-              <span>{activeOrg?.name ?? 'Select Org'}</span>
-              <span className="text-[10px]">{orgDropdownOpen ? '▴' : '▾'}</span>
-            </button>
+          features.canSeeOrgSelector ? (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setOrgDropdownOpen((v) => !v)}
+                className="flex w-[160px] items-center gap-1.5 rounded border border-deco-border bg-deco-raised px-3 py-1.5 font-mono text-xs font-semibold transition-colors hover:border-deco-amber/40 hover:text-deco-amber"
+                style={{
+                  color: activeOrg ? 'rgb(var(--color-amber))' : 'rgb(var(--color-text-dim))',
+                }}
+              >
+                <span className="shrink-0">◇</span>
+                <span className="flex-1 truncate text-left">{activeOrg?.name ?? 'Select Org'}</span>
+                <span className="shrink-0 text-[10px]">{orgDropdownOpen ? '▴' : '▾'}</span>
+              </button>
 
-            {orgDropdownOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded border border-deco-border bg-deco-surface shadow-lg">
-                {orgs.length === 0 ? (
-                  <div className="px-3 py-2 font-mono text-[11px] text-deco-text-dim">
-                    No organizations
-                  </div>
-                ) : (
-                  orgs.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => handleOrgSelect(org)}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[12px] transition-colors hover:bg-deco-amber/8 ${
-                        activeOrg?.id === org.id
-                          ? 'text-deco-amber'
-                          : 'text-deco-text-soft'
-                      }`}
-                    >
-                      {activeOrg?.id === org.id && <span className="text-[10px]">✓</span>}
-                      {activeOrg?.id !== org.id && <span className="w-[14px]" />}
-                      <span className="font-semibold">{org.name}</span>
-                      <span className="ml-auto rounded bg-deco-bg px-1.5 py-px text-[9px] text-deco-text-dim">
-                        {org.plan ?? 'free'}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
+              {orgDropdownOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-[220px] rounded border border-deco-border bg-deco-surface shadow-lg">
+                  {orgs.length === 0 ? (
+                    <div className="px-3 py-2 font-mono text-[11px] text-deco-text-dim">
+                      No organizations
+                    </div>
+                  ) : (
+                    orgs.map((org) => (
+                      <button
+                        key={org.id}
+                        onClick={() => handleOrgSelect(org)}
+                        className={`flex w-full items-start gap-2 px-3 py-2.5 text-left font-mono transition-colors hover:bg-deco-amber/8 ${
+                          activeOrg?.id === org.id ? 'text-deco-amber' : 'text-deco-text-soft'
+                        }`}
+                      >
+                        <span className="mt-px shrink-0 text-[10px]">
+                          {activeOrg?.id === org.id ? '✓' : ' '}
+                        </span>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate text-[12px] font-semibold">{org.name}</span>
+                          <span className="text-[10px] text-deco-text-dim">{org.plan ?? 'free'}</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : boundOrg ? (
+            // Org-admins see their org name as static text
+            <div className="flex items-center gap-1.5 rounded border border-deco-border bg-deco-raised px-3 py-1.5 font-mono text-xs">
+              <span className="text-deco-text-dim">◇</span>
+              <span className="font-semibold text-deco-amber">{boundOrg.name}</span>
+            </div>
+          ) : null
         )}
 
         {/* Search */}

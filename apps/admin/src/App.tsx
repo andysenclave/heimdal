@@ -3,6 +3,7 @@ import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@auth/AuthProvider';
 import { OrgProvider } from '@/context/OrgContext';
+import { AppProvider } from '@/context/AppContext';
 import { router } from '@/router/routes';
 import { useThemeStore } from '@lib/stores/themeStore';
 import { useEffect } from 'react';
@@ -32,6 +33,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <OrgProvider>
+          <AppProvider>
           <ThemeInitializer />
           <RouterProvider router={router} />
           <Toaster
@@ -40,6 +42,7 @@ export default function App() {
               className: 'font-mono text-xs',
             }}
           />
+          </AppProvider>
         </OrgProvider>
       </AuthProvider>
     </QueryClientProvider>

@@ -15,7 +15,7 @@ import type { DecoColumnDef } from '@components/primitives';
 import { PageHeader } from '@components/common/PageHeader';
 import { EmptyState } from '@components/common/EmptyState';
 import { ConfirmDialog } from '@components/common/ConfirmDialog';
-import { RolePermissionsPanel } from '@components/sections';
+import { RolePermissionsPanel, AppSelector } from '@components/sections';
 import {
   useRoles,
   useCreateRole,
@@ -25,6 +25,9 @@ import {
 import type { CreateRolePayload, UpdateRolePayload } from '@api/hooks/useRoles';
 import { useOrganizations } from '@api/hooks/useOrganizations';
 import { useApplications } from '@api/hooks/useApplications';
+import { useActiveOrg } from '@/context/OrgContext';
+import { useActiveApp } from '@/context/AppContext';
+import { useFeatureAccess } from '@auth/hooks/useRoleGate';
 import { formatDate } from '@lib/format';
 import { extractApiError } from '@lib/errors';
 import { useDebounce } from '@hooks/useDebounce';
@@ -39,7 +42,7 @@ const createRoleSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'Name must be lowercase alphanumeric with hyphens'),
   orgId: z.string().min(1, 'Organization is required'),
   appId: z.string().min(1, 'Application is required'),
-  parentRoleId: z.string().optional(),
+  baseRoleId: z.string().optional(),
 });
 
 const editRoleSchema = z.object({
@@ -65,14 +68,23 @@ const TYPE_FILTER_OPTIONS = [
 function CreateRoleModal({
   open,
   onClose,
+  prefilledOrgId,
+  prefilledOrgName,
+  prefilledAppId,
+  prefilledAppName,
 }: {
   open: boolean;
   onClose: () => void;
+  prefilledOrgId?: string;
+  prefilledOrgName?: string;
+  prefilledAppId?: string;
+  prefilledAppName?: string;
 }) {
   const createRole = useCreateRole();
+  // Only fetch org/app lists when values are not pre-supplied
   const { data: orgsData } = useOrganizations();
-  const { data: appsData } = useApplications();
-  const { data: rolesData } = useRoles();
+  const { data: appsData } = useApplications(prefilledOrgId);
+  const { data: rolesData } = useRoles(prefilledAppId);
 
   const orgs = orgsData?.data ?? [];
   const apps = appsData?.data ?? [];
@@ -86,30 +98,36 @@ function CreateRoleModal({
     formState: { errors },
   } = useForm<CreateRoleForm>({
     resolver: zodResolver(createRoleSchema),
-    defaultValues: { name: '', orgId: '', appId: '', parentRoleId: '' },
+    defaultValues: {
+      name: '',
+      orgId: prefilledOrgId ?? '',
+      appId: prefilledAppId ?? '',
+      baseRoleId: '',
+    },
   });
 
   const selectedOrgId = watch('orgId');
   const selectedAppId = watch('appId');
 
-  // Filter apps by selected org
+  // When not pre-filled, filter apps by selected org
   const filteredApps = useMemo(
     () => (selectedOrgId ? apps.filter((a) => a.orgId === selectedOrgId) : apps),
     [apps, selectedOrgId],
   );
 
-  // Filter parent role options by selected app
+  // Parent role candidates scoped to the effective app
+  const effectiveAppId = prefilledAppId ?? selectedAppId;
   const parentRoleOptions = useMemo(
-    () => (selectedAppId ? roles.filter((r) => r.appId === selectedAppId) : []),
-    [roles, selectedAppId],
+    () => (effectiveAppId ? roles.filter((r) => r.appId === effectiveAppId) : []),
+    [roles, effectiveAppId],
   );
 
   const onSubmit = async (data: CreateRoleForm) => {
     const payload: CreateRolePayload = {
       name: data.name,
-      orgId: data.orgId,
-      appId: data.appId,
-      parentRoleId: data.parentRoleId || undefined,
+      orgId: prefilledOrgId ?? data.orgId,
+      appId: prefilledAppId ?? data.appId,
+      baseRoleId: data.baseRoleId || undefined,
     };
     try {
       await createRole.mutateAsync(payload);
@@ -122,14 +140,16 @@ function CreateRoleModal({
     }
   };
 
+  const handleClose = () => { reset(); onClose(); };
+
   return (
     <DecoModal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Create Role"
       footer={
         <>
-          <DecoButton variant="ghost" onClick={onClose}>
+          <DecoButton variant="ghost" onClick={handleClose}>
             Cancel
           </DecoButton>
           <DecoButton onClick={handleSubmit(onSubmit)} disabled={createRole.isPending}>
@@ -147,34 +167,58 @@ function CreateRoleModal({
           error={errors.name?.message}
           hint="Lowercase alphanumeric with hyphens"
         />
-        <DecoSelect label="Organization" {...register('orgId')} error={errors.orgId?.message}>
-          <option value="">Select organization...</option>
-          {orgs.map((org) => (
-            <option key={org.id} value={org.id}>
-              {org.name}
-            </option>
-          ))}
-        </DecoSelect>
-        <DecoSelect label="Application" {...register('appId')} error={errors.appId?.message}>
-          <option value="">Select application...</option>
-          {filteredApps.map((app) => (
-            <option key={app.id} value={app.id}>
-              {app.name}
-            </option>
-          ))}
-        </DecoSelect>
+
+        {/* Org — read-only when pre-filled, dropdown otherwise */}
+        {prefilledOrgId ? (
+          <div className="space-y-1">
+            <label className="font-mono text-[11px] uppercase tracking-deco-wide text-deco-text-dim">
+              Organization
+            </label>
+            <div className="rounded border border-deco-border bg-deco-bg px-3 py-2 font-mono text-xs text-deco-amber">
+              {prefilledOrgName ?? prefilledOrgId}
+            </div>
+          </div>
+        ) : (
+          <DecoSelect label="Organization" {...register('orgId')} error={errors.orgId?.message}>
+            <option value="">Select organization...</option>
+            {orgs.map((org) => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </DecoSelect>
+        )}
+
+        {/* App — read-only when pre-filled, dropdown otherwise */}
+        {prefilledAppId ? (
+          <div className="space-y-1">
+            <label className="font-mono text-[11px] uppercase tracking-deco-wide text-deco-text-dim">
+              Application
+            </label>
+            <div className="rounded border border-deco-border bg-deco-bg px-3 py-2 font-mono text-xs text-deco-teal">
+              {prefilledAppName ?? prefilledAppId}
+            </div>
+          </div>
+        ) : (
+          <DecoSelect label="Application" {...register('appId')} error={errors.appId?.message}>
+            <option value="">Select application...</option>
+            {filteredApps.map((app) => (
+              <option key={app.id} value={app.id}>{app.name}</option>
+            ))}
+          </DecoSelect>
+        )}
+
         <DecoSelect
-          label="Parent Role"
-          {...register('parentRoleId')}
-          error={errors.parentRoleId?.message}
+          label="Base Role (optional)"
+          {...register('baseRoleId')}
+          error={errors.baseRoleId?.message}
         >
-          <option value="">None (root role)</option>
+          <option value="">None (standalone role)</option>
           {parentRoleOptions.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
+            <option key={role.id} value={role.id}>{role.name}</option>
           ))}
         </DecoSelect>
+        <p className="font-mono text-[10px] text-deco-text-dim -mt-2">
+          This role will inherit all permissions from the base role
+        </p>
       </form>
     </DecoModal>
   );
@@ -256,10 +300,10 @@ function EditRoleModal({
 
 // --- Helpers ---
 
-function resolveParentName(parentRoleId: string | null, roles: Role[]): string {
-  if (!parentRoleId) return '';
-  const parent = roles.find((r) => r.id === parentRoleId);
-  return parent ? parent.name : parentRoleId;
+function resolveBaseRoleName(baseRoleId: string | null, roles: Role[]): string {
+  if (!baseRoleId) return '';
+  const base = roles.find((r) => r.id === baseRoleId);
+  return base ? base.name : baseRoleId;
 }
 
 function resolveAppName(appId: string, apps: { id: string; name: string }[]): string {
@@ -277,9 +321,12 @@ export default function Roles() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
   const [permissionsRole, setPermissionsRole] = useState<Role | null>(null);
 
+  const { activeOrg } = useActiveOrg();
+  const { activeApp } = useActiveApp();
+  const { canWriteRoles, canDeleteRoles } = useFeatureAccess();
   const debouncedSearch = useDebounce(search, 250);
-  const { data, isLoading } = useRoles();
-  const { data: appsData } = useApplications();
+  const { data, isLoading } = useRoles(activeApp?.id, activeOrg?.id);
+  const { data: appsData } = useApplications(activeOrg?.id);
   const deleteRoleMutation = useDeleteRole();
 
   const roles = data?.data ?? [];
@@ -331,11 +378,11 @@ export default function Roles() {
     },
     {
       key: 'parent',
-      header: 'Parent',
+      header: 'Base Role',
       cell: (row) =>
-        row.parentRoleId ? (
+        row.baseRoleId ? (
           <span className="font-mono text-[12px] text-deco-text-soft">
-            {resolveParentName(row.parentRoleId, roles)}
+            {resolveBaseRoleName(row.baseRoleId, roles)}
           </span>
         ) : (
           <span className="font-mono text-[11px] text-deco-text-dim">&mdash;</span>
@@ -388,46 +435,51 @@ export default function Roles() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setPermissionsRole(row);
-            }}
-            className="rounded px-2 py-1 font-mono text-[10px] text-deco-teal hover:bg-deco-teal/10 transition-colors"
-          >
-            Perms
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditRole(row);
-            }}
-            className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-soft hover:bg-deco-surface-hover hover:text-deco-amber transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (row.isSystem) {
-                decoToast.error('System roles cannot be deleted');
-                return;
-              }
-              setDeleteRole(row);
-            }}
-            disabled={row.isSystem}
-            className={`rounded px-2 py-1 font-mono text-[10px] transition-colors ${
-              row.isSystem
-                ? 'cursor-not-allowed text-deco-text-dim/40'
-                : 'text-deco-text-dim hover:bg-deco-red/10 hover:text-deco-red'
-            }`}
-          >
-            Delete
-          </button>
-        </div>
-      ),
+      cell: (row) => {
+        if (!canWriteRoles) return null;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPermissionsRole(row);
+              }}
+              className="rounded px-2 py-1 font-mono text-[10px] text-deco-teal hover:bg-deco-teal/10 transition-colors"
+            >
+              Perms
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditRole(row);
+              }}
+              className="rounded px-2 py-1 font-mono text-[10px] text-deco-text-soft hover:bg-deco-surface-hover hover:text-deco-amber transition-colors"
+            >
+              Edit
+            </button>
+            {canDeleteRoles && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (row.isSystem) {
+                    decoToast.error('System roles cannot be deleted');
+                    return;
+                  }
+                  setDeleteRole(row);
+                }}
+                disabled={row.isSystem}
+                className={`rounded px-2 py-1 font-mono text-[10px] transition-colors ${
+                  row.isSystem
+                    ? 'cursor-not-allowed text-deco-text-dim/40'
+                    : 'text-deco-text-dim hover:bg-deco-red/10 hover:text-deco-red'
+                }`}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        );
+      },
       className: 'w-[180px]',
     },
   ];
@@ -446,9 +498,14 @@ export default function Roles() {
         title="Roles"
         subtitle="Manage role hierarchy and assignments"
         action={
-          <DecoButton onClick={() => setCreateOpen(true)}>
-            + Create Role
-          </DecoButton>
+          <div className="flex items-center gap-2">
+            <AppSelector />
+            {canWriteRoles && (
+              <DecoButton onClick={() => setCreateOpen(true)}>
+                + Create Role
+              </DecoButton>
+            )}
+          </div>
         }
       />
 
@@ -506,7 +563,14 @@ export default function Roles() {
       )}
 
       {/* Modals */}
-      <CreateRoleModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateRoleModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        prefilledOrgId={activeOrg?.id}
+        prefilledOrgName={activeOrg?.name}
+        prefilledAppId={activeApp?.id}
+        prefilledAppName={activeApp?.name}
+      />
 
       {editRole && (
         <EditRoleModal

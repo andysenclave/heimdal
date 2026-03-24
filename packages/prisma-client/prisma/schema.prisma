@@ -32,6 +32,7 @@ model Organization {
   roles         Role[]
   permissions   Permission[]
   auditLogs     AuditLog[]
+  invites       Invite[]
 
   @@map("organizations")
 }
@@ -58,6 +59,9 @@ model Application {
   permissions     Permission[]
   userAppRoles    UserAppRole[]
   accessBindings  AccessBinding[]
+  orgMemberships  OrgMembership[]
+  invites         Invite[]
+  appMemberships  AppMembership[]
 
   @@index([orgId])
   @@map("applications")
@@ -89,6 +93,7 @@ model User {
   auditLogs        AuditLog[]
   invitesSent      Invite[]    @relation("InvitesSent")
   invitesAccepted  Invite[]    @relation("InviteAccepted")
+  appMemberships   AppMembership[]
 
   @@map("users")
 }
@@ -98,9 +103,10 @@ model User {
 // ─────────────────────────────────────────────
 
 model OrgMembership {
-  id     String @id @default(cuid())
+  id    String  @id @default(cuid())
   userId String
   orgId  String
+  appId  String?         // member-scoped: which app this member can access (null = all apps for admin/owner)
   role   OrgRole @default(member)
 
   createdAt DateTime @default(now())
@@ -109,10 +115,12 @@ model OrgMembership {
   // Relations
   user User         @relation(fields: [userId], references: [id])
   org  Organization @relation(fields: [orgId], references: [id])
+  app  Application? @relation(fields: [appId], references: [id])
 
   @@unique([userId, orgId])
   @@index([orgId])
   @@index([userId])
+  @@index([appId])
   @@map("org_memberships")
 }
 
@@ -133,23 +141,23 @@ model Role {
   name         String
   description  String?
   isSystem     Boolean @default(false)
-  parentRoleId String?
+  baseRoleId   String?
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Relations
-  org             Organization     @relation(fields: [orgId], references: [id])
-  app             Application      @relation(fields: [appId], references: [id])
-  parentRole      Role?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
-  childRoles      Role[]           @relation("RoleHierarchy")
+  org          Organization     @relation(fields: [orgId], references: [id])
+  app          Application      @relation(fields: [appId], references: [id])
+  baseRole     Role?            @relation("RoleInheritance", fields: [baseRoleId], references: [id])
+  derivedRoles Role[]           @relation("RoleInheritance")
   rolePermissions RolePermission[]
   userAppRoles    UserAppRole[]
 
   @@unique([appId, name])
   @@index([orgId])
   @@index([appId])
-  @@index([parentRoleId])
+  @@index([baseRoleId])
   @@map("roles")
 }
 
@@ -306,6 +314,9 @@ model Invite {
   id               String       @id @default(cuid())
   code             String       @unique   // HMD-XXXXX format (no ambiguous chars)
   email            String                 // target email address
+  orgId            String?                // target org (null = bootstrap/platform-admin invite)
+  orgRole          OrgRole      @default(member) // role granted in target org
+  appId            String?                // for member invites — which app they can access
   invitedById      String                 // FK → User (the admin who created this invite)
   status           InviteStatus @default(PENDING)
   expiresAt        DateTime               // createdAt + 48h
@@ -316,14 +327,40 @@ model Invite {
   updatedAt        DateTime     @updatedAt
 
   // Relations
-  invitedBy  User  @relation("InvitesSent", fields: [invitedById], references: [id])
-  acceptedBy User? @relation("InviteAccepted", fields: [acceptedByUserId], references: [id])
+  org        Organization? @relation(fields: [orgId], references: [id])
+  app        Application?  @relation(fields: [appId], references: [id])
+  invitedBy  User          @relation("InvitesSent", fields: [invitedById], references: [id])
+  acceptedBy User?         @relation("InviteAccepted", fields: [acceptedByUserId], references: [id])
 
   @@index([email])
+  @@index([orgId])
+  @@index([appId])
   @@index([invitedById])
   @@index([status])
   @@index([expiresAt])
   @@map("invites")
+}
+
+// ─────────────────────────────────────────────
+// AppMembership — end-user registered in an app via SDK
+// These users cannot access Heimdal admin; they authenticate via SDK endpoints only.
+// ─────────────────────────────────────────────
+
+model AppMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  appId     String   // Application.id (internal CUID)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app  Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appId])
+  @@index([userId])
+  @@index([appId])
+  @@map("app_memberships")
 }
 
 enum InviteStatus {

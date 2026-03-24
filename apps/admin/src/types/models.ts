@@ -39,9 +39,17 @@ export interface User {
   updatedAt: string;
 }
 
+export interface OrgMembershipApp {
+  id: string;
+  name: string;
+  appId: string;
+}
+
 export interface OrgMembership {
   userId: string;
   orgId: string;
+  appId: string | null;
+  apps: OrgMembershipApp[];
   role: 'owner' | 'admin' | 'member';
   user: User;
   createdAt: string;
@@ -52,17 +60,17 @@ export interface Role {
   orgId: string;
   appId: string;
   name: string;
-  parentRoleId: string | null;
+  baseRoleId: string | null;
   isSystem: boolean;
   createdAt: string;
   updatedAt: string;
-  parentRole?: Role | null;
-  childRoles?: Role[];
+  baseRole?: Role | null;
+  derivedRoles?: Role[];
   permissions?: Permission[];
   _count?: {
     rolePermissions: number;
     userAppRoles: number;
-    childRoles?: number;
+    derivedRoles?: number;
   };
   rolePermissions?: { permission: Permission }[];
 }
@@ -104,10 +112,15 @@ export interface Invite {
   id: string;
   code: string;
   email: string;
+  orgId: string | null;
+  orgRole: 'owner' | 'admin' | 'member';
+  appId: string | null;
   status: InviteStatus;
   expiresAt: string;
   acceptedAt: string | null;
   createdAt: string;
+  org: { id: string; name: string } | null;
+  app: { id: string; name: string; appId: string } | null;
   invitedBy: {
     id: string;
     email: string;
@@ -124,4 +137,29 @@ export interface InviteValidation {
   valid: boolean;
   email?: string;
   expiresAt?: string;
+}
+
+export interface AppUserRole {
+  id: string;
+  name: string;
+}
+
+export interface AppUser {
+  id: string;           // AppMembership.id
+  userId: string;
+  appId: string;        // Application.id (internal)
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    emailVerified: boolean;
+    createdAt: string;
+  };
+  roles: AppUserRole[];
+  createdAt: string;
+}
+
+export interface AppUsersResponse {
+  data: AppUser[];
+  total: number;
 }

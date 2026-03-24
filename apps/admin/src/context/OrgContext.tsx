@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { Organization } from '@/types/models';
 import { api } from '@api/client';
+import { useAuth } from '@auth/hooks/useAuth';
 
 const STORAGE_KEY = 'heimdal_active_org_id';
 
@@ -21,48 +22,67 @@ interface OrgContextValue {
 const OrgContext = createContext<OrgContextValue | null>(null);
 
 export function OrgProvider({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
   const [activeOrg, setActiveOrgState] = useState<Organization | null>(null);
-  const [storedOrgId, setStoredOrgId] = useState<string | null>(
-    () => localStorage.getItem(STORAGE_KEY),
-  );
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // When storedOrgId changes, try to load that org
   useEffect(() => {
-    if (!storedOrgId) return;
+    if (!session) {
+      setActiveOrgState(null);
+      setIsInitialized(true);
+      return;
+    }
+
+    // Org-admins: auto-bind to their single org, no switching allowed
+    if (!session.isHeimdalAdmin && session.org) {
+      setActiveOrgState(session.org as Organization);
+      setIsInitialized(true);
+      return;
+    }
+
+    // Platform admins: restore from localStorage
+    const storedOrgId = localStorage.getItem(STORAGE_KEY);
+    if (!storedOrgId) {
+      setIsInitialized(true);
+      return;
+    }
 
     let isMounted = true;
-
     api
       .get(`admin/orgs/${storedOrgId}`)
       .json<Organization>()
       .then((org) => {
-        if (isMounted) {
-          setActiveOrgState(org);
-        }
+        if (isMounted) setActiveOrgState(org);
       })
       .catch(() => {
-        // Org no longer accessible — clear stored ID
         if (isMounted) {
           localStorage.removeItem(STORAGE_KEY);
-          setStoredOrgId(null);
         }
+      })
+      .finally(() => {
+        if (isMounted) setIsInitialized(true);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [storedOrgId]);
+  }, [session]);
 
-  const setActiveOrg = useCallback((org: Organization) => {
-    setActiveOrgState(org);
-    localStorage.setItem(STORAGE_KEY, org.id);
-  }, []);
+  const setActiveOrg = useCallback(
+    (org: Organization) => {
+      // Org-admins cannot switch orgs
+      if (session && !session.isHeimdalAdmin) return;
+      setActiveOrgState(org);
+      localStorage.setItem(STORAGE_KEY, org.id);
+    },
+    [session],
+  );
 
   const clearActiveOrg = useCallback(() => {
+    if (session && !session.isHeimdalAdmin) return;
     setActiveOrgState(null);
     localStorage.removeItem(STORAGE_KEY);
-    setStoredOrgId(null);
-  }, []);
+  }, [session]);
 
   return (
     <OrgContext.Provider
@@ -73,7 +93,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         isOrgSelected: activeOrg !== null,
       }}
     >
-      {children}
+      {isInitialized ? children : null}
     </OrgContext.Provider>
   );
 }

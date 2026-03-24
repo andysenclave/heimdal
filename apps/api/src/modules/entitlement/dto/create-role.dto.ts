@@ -14,10 +14,10 @@ export class CreateRoleDto {
   @IsNotEmpty()
   orgId!: string;
 
-  @ApiPropertyOptional({ example: 'role_cuid001', description: 'Parent role ID for hierarchy' })
+  @ApiPropertyOptional({ example: 'role_cuid001', description: 'Base role ID — this role inherits all permissions from the base role' })
   @IsOptional()
   @IsString()
-  parentRoleId?: string;
+  baseRoleId?: string;
 
   @ApiPropertyOptional({ example: 'Can edit content but not delete' })
   @IsOptional()

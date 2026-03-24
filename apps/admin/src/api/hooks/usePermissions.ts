@@ -4,10 +4,16 @@ import { queryKeys } from '@lib/queryKeys';
 import type { Permission } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
-async function fetchPermissions(appId?: string): Promise<PaginatedResponse<Permission>> {
-  const searchParams = appId ? { appId } : undefined;
+async function fetchPermissions(appId?: string, orgId?: string): Promise<PaginatedResponse<Permission>> {
+  const searchParams: Record<string, string> = {};
+  if (appId) searchParams.appId = appId;
+  if (orgId) searchParams.orgId = orgId;
   const perms = await api
-    .get('admin/permissions', { searchParams, retry: 0, timeout: 5000 })
+    .get('admin/permissions', {
+      searchParams: Object.keys(searchParams).length ? searchParams : undefined,
+      retry: 0,
+      timeout: 5000,
+    })
     .json<Permission[]>();
   return { data: perms, total: perms.length, page: 1, pageSize: perms.length };
 }
@@ -36,10 +42,14 @@ async function deletePermission(id: string): Promise<void> {
   await api.delete(`admin/permissions/${id}`);
 }
 
-export function usePermissions(appId?: string) {
+export function usePermissions(appId?: string, orgId?: string) {
   return useQuery({
-    queryKey: appId ? queryKeys.permissions.byApp(appId) : queryKeys.permissions.all,
-    queryFn: () => fetchPermissions(appId),
+    queryKey: appId
+      ? queryKeys.permissions.byApp(appId)
+      : orgId
+        ? queryKeys.permissions.byOrg(orgId)
+        : queryKeys.permissions.all,
+    queryFn: () => fetchPermissions(appId, orgId),
   });
 }
 
