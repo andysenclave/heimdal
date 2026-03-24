@@ -148,9 +148,5 @@ vite.config.ts.timestamp-*
 # IDE
 .vscode
 .idea
-
-# Local planning docs — never committed
-resources/
-
-# claude files to be ignored
+resources/*
 .claude/*
