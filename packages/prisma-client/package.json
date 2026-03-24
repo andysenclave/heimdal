@@ -9,7 +9,7 @@
     "prisma"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "dev": "tsc --watch",
     "lint": "echo \"No lint for prisma-client\"",
     "type-check": "tsc --noEmit",
@@ -25,7 +25,14 @@
     "@prisma/client": "^6.4.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/nodemailer": "^7.0.11",
+    "bcryptjs": "^3.0.3",
     "prisma": "^6.4.0",
+    "ts-node": "^10.9.0",
     "typescript": "^5.7.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
