@@ -11,7 +11,9 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes, createHash } from 'node:crypto';
 import { PrismaService } from '../../common/prisma';
 import { EmailService } from '../../common/email/email.service';
-import type { HeimdalJwtClaims } from '@heimdal/shared';
+import { InviteService } from '../invite/invite.service';
+import type { HeimdalJwtClaims, HeimdalRole } from '@heimdal/shared';
+import { HEIMDAL_ROLES } from '@heimdal/shared';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -31,9 +33,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly inviteService: InviteService,
   ) {}
 
-  // ─── Signup ──────────────────────────────────────────────────────────────
+  // ─── Signup (invite-gated) ───────────────────────────────────────────────
 
   async signup(dto: SignupDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -45,9 +48,15 @@ export class AuthService {
     const verificationToken = randomBytes(VERIFY_TOKEN_BYTES).toString('hex');
     const verificationExpiry = new Date(Date.now() + VERIFY_TTL_HOURS * 60 * 60 * 1000);
 
-    // Transaction: create User → default Org → OrgMembership → Session
-    const { user, org, session, accessToken, refreshToken } = await this.prisma.$transaction(
+    // Transaction: validate invite → create User → Org/Membership → consume invite → Session
+    const { user, orgId, session, accessToken, refreshToken } = await this.prisma.$transaction(
       async (tx) => {
+        // Validate invite code inside the transaction to prevent race conditions
+        const invite = await this.inviteService.consumeInvite(dto.inviteCode, dto.email, tx);
+
+        // Invited to a specific org → org-admin; no specific org → bootstrap platform admin
+        const isHeimdalAdmin = !invite.orgId;
+
         const user = await tx.user.create({
           data: {
             email: dto.email,
@@ -56,30 +65,50 @@ export class AuthService {
             emailVerified: false,
             emailVerificationToken: verificationToken,
             emailVerificationExpiry: verificationExpiry,
+            isHeimdalAdmin,
           },
         });
 
-        // Auto-create a personal org for the user
-        const orgSlug = this.slugify(dto.name ?? dto.email.split('@')[0]);
-        const org = await tx.organization.create({
-          data: {
-            name: dto.name ? `${dto.name}'s Org` : dto.email.split('@')[0],
-            slug: await this.uniqueSlug(orgSlug, tx),
-          },
-        });
+        // Mark invite as accepted
+        await this.inviteService.markAccepted(invite.id, user.id, tx);
 
-        await tx.orgMembership.create({
-          data: { userId: user.id, orgId: org.id, role: 'owner' },
-        });
+        let orgId: string;
 
+        if (invite.orgId) {
+          // Invited to specific org: join as the role specified in the invite
+          await tx.orgMembership.create({
+            data: {
+              userId: user.id,
+              orgId: invite.orgId,
+              role: invite.orgRole,
+              appId: invite.appId ?? null,  // member-scoped app access
+            },
+          });
+          orgId = invite.orgId;
+        } else {
+          // Bootstrap / platform-admin invite: auto-create personal org
+          const orgSlug = this.slugify(dto.name ?? dto.email.split('@')[0]);
+          const org = await tx.organization.create({
+            data: {
+              name: dto.name ? `${dto.name}'s Org` : dto.email.split('@')[0],
+              slug: await this.uniqueSlug(orgSlug, tx),
+            },
+          });
+          await tx.orgMembership.create({
+            data: { userId: user.id, orgId: org.id, role: 'owner' },
+          });
+          orgId = org.id;
+        }
+
+        const aud = isHeimdalAdmin ? 'heimdal-admin' : orgId;
         const { accessToken, refreshToken, hashedRefresh, expiresAt } =
-          await this.generateTokenPair(user.id, org.id, 'heimdal-admin', ['owner']);
+          await this.generateTokenPair(user.id, orgId, aud, [isHeimdalAdmin ? 'owner' : invite.orgRole]);
 
         const session = await tx.session.create({
           data: { userId: user.id, token: hashedRefresh, expiresAt },
         });
 
-        return { user, org, session, accessToken, refreshToken };
+        return { user, orgId, session, accessToken, refreshToken };
       },
     );
 
@@ -88,7 +117,9 @@ export class AuthService {
       this.logger.error(`Failed to send verification email to ${user.email}`, err);
     });
 
-    this.logger.log(`Signup: ${user.email} → org ${org.id} (email verification pending)`);
+    this.logger.log(
+      `Signup: ${user.email} → org ${orgId} (invite ${dto.inviteCode} consumed, isHeimdalAdmin: ${user.isHeimdalAdmin})`,
+    );
 
     return {
       accessToken,
@@ -97,7 +128,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        orgId: org.id,
+        orgId,
         emailVerified: false,
       },
       sessionId: session.id,
@@ -192,8 +223,9 @@ export class AuthService {
       throw new UnauthorizedException('User has no organization membership');
     }
 
-    const roles = await this.resolveRoles(user.id, membership.orgId, dto.appId);
-    const aud = dto.appId ?? 'heimdal-admin';
+    const { roles } = await this.resolveRoles(user.id, membership.orgId, dto.appId);
+    // Platform admins get 'heimdal-admin' audience; org-admins are scoped to their org
+    const aud = dto.appId ?? (user.isHeimdalAdmin ? 'heimdal-admin' : membership.orgId);
 
     const { accessToken, refreshToken, hashedRefresh, expiresAt } = await this.generateTokenPair(
       user.id,
@@ -244,11 +276,12 @@ export class AuthService {
       });
       if (!membership) throw new Error('No membership');
 
-      const roles = await this.resolveRoles(user.id, membership.orgId, undefined);
+      const { roles } = await this.resolveRoles(user.id, membership.orgId, undefined);
+      const aud = user.isHeimdalAdmin ? 'heimdal-admin' : membership.orgId;
       const { accessToken, refreshToken, hashedRefresh, expiresAt } = await this.generateTokenPair(
         user.id,
         membership.orgId,
-        'heimdal-admin',
+        aud,
         roles,
       );
 
@@ -279,12 +312,40 @@ export class AuthService {
   async getSession(claims: HeimdalJwtClaims) {
     const user = await this.prisma.user.findUnique({
       where: { id: claims.sub },
-      select: { id: true, email: true, name: true, emailVerified: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        emailVerified: true,
+        isHeimdalAdmin: true,
+        createdAt: true,
+      },
     });
     if (!user) throw new NotFoundException('User not found');
 
+    const systemRole: HeimdalRole = user.isHeimdalAdmin
+      ? HEIMDAL_ROLES.PLATFORM_ADMIN
+      : HEIMDAL_ROLES.ORG_ADMIN;
+
+    // Get the user's bound org details
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        org: { select: { id: true, name: true, slug: true } },
+        app: { select: { id: true, name: true, appId: true } },
+      },
+    });
+
     return {
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.emailVerified,
+        isHeimdalAdmin: user.isHeimdalAdmin,
+        createdAt: user.createdAt,
+      },
       session: {
         id: claims.sessionId,
         orgId: claims.org,
@@ -292,6 +353,10 @@ export class AuthService {
         roles: claims.roles,
         expiresAt: new Date(claims.exp * 1000).toISOString(),
       },
+      systemRole,
+      org: membership?.org ?? null,
+      // Populated only for org members; null for owners/admins whose OrgMembership.appId is null
+      boundApp: membership?.app ?? null,
     };
   }
 
@@ -338,19 +403,24 @@ export class AuthService {
     userId: string,
     orgId: string,
     appId: string | undefined,
-  ): Promise<string[]> {
-    const membership = await this.prisma.orgMembership.findUnique({
-      where: { userId_orgId: { userId, orgId } },
-    });
+  ): Promise<{ roles: string[]; isHeimdalAdmin: boolean }> {
+    const [userRecord, membership] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { isHeimdalAdmin: true } }),
+      this.prisma.orgMembership.findUnique({ where: { userId_orgId: { userId, orgId } } }),
+    ]);
 
     const orgRole = membership?.role ?? 'member';
 
-    if (!appId) return [orgRole];
+    if (!appId) {
+      return { roles: [orgRole], isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false };
+    }
 
     // dto.appId is the public appId string (e.g. "app_mimir").
     // UserAppRole.appId stores the internal Application.id — resolve first.
     const app = await this.prisma.application.findUnique({ where: { appId } });
-    if (!app) return [orgRole];
+    if (!app) {
+      return { roles: [orgRole], isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false };
+    }
 
     const appRoles = await this.prisma.userAppRole.findMany({
       where: { userId, appId: app.id },
@@ -358,7 +428,10 @@ export class AuthService {
     });
 
     const roleNames = appRoles.map((r) => r.role.name);
-    return [orgRole, ...roleNames];
+    return {
+      roles: [orgRole, ...roleNames],
+      isHeimdalAdmin: userRecord?.isHeimdalAdmin ?? false,
+    };
   }
 
   private slugify(name: string): string {

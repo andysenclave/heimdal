@@ -1,9 +1,34 @@
 import { PrismaClient, OrgRole } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+const BCRYPT_ROUNDS = 12;
+
 async function main() {
   console.log('Seeding Heimdal database...');
+
+  // ── Bootstrap Heimdal Admin ──────────────────────────
+  const bootstrapEmail = process.env.HEIMDAL_BOOTSTRAP_EMAIL || 'admin@heimdal.thimple.in';
+  const bootstrapPassword = process.env.HEIMDAL_BOOTSTRAP_PASSWORD || 'changeme-on-first-login';
+
+  const existingBootstrap = await prisma.user.findUnique({ where: { email: bootstrapEmail } });
+  if (!existingBootstrap) {
+    const hashedPassword = await bcrypt.hash(bootstrapPassword, BCRYPT_ROUNDS);
+    await prisma.user.create({
+      data: {
+        email: bootstrapEmail,
+        name: 'Heimdal Bootstrap Admin',
+        password: hashedPassword,
+        emailVerified: true,
+        isHeimdalAdmin: true,
+      },
+    });
+    console.log('  WARNING: Bootstrap admin created — CHANGE PASSWORD IMMEDIATELY');
+    console.log(`  Email: ${bootstrapEmail}`);
+  } else {
+    console.log('  Bootstrap admin already exists, skipping');
+  }
 
   // ── Organizations ──────────────────────────────────
   const thimple = await prisma.organization.upsert({
@@ -34,10 +59,21 @@ async function main() {
       email: 'andy@thimple.dev',
       name: 'Anindya Sengupta',
       emailVerified: true,
+      isHeimdalAdmin: true,
     },
   });
 
   console.log(`  Admin user: ${admin.email}`);
+
+  // ── Bootstrap admin org membership ───────────────────
+  const bootstrapAdmin = await prisma.user.findUnique({ where: { email: bootstrapEmail } });
+  if (bootstrapAdmin) {
+    await prisma.orgMembership.upsert({
+      where: { userId_orgId: { userId: bootstrapAdmin.id, orgId: thimple.id } },
+      update: {},
+      create: { userId: bootstrapAdmin.id, orgId: thimple.id, role: OrgRole.owner },
+    });
+  }
 
   // ── Org Memberships ────────────────────────────────
   for (const org of [thimple, acme, demo]) {

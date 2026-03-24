@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { EntitlementService } from './entitlement.service';
 import {
@@ -8,6 +8,11 @@ import {
   UpdatePermissionDto,
   AssignPermissionsDto,
 } from './dto';
+import { OrgScoped } from '../../common/decorators/org-scoped.decorator';
+import { OrgWriteAccess } from '../../common/guards/org-membership.guard';
+import type { Request } from 'express';
+
+type ScopedRequest = Request & { resolvedOrgId?: string };
 
 @ApiTags('admin/entitlements')
 @ApiBearerAuth()
@@ -18,6 +23,7 @@ export class EntitlementController {
   // ─── Roles (nested — create) ───────────────────────────────────────────────
 
   @Post('apps/:appId/roles')
+  @OrgScoped()
   @ApiOperation({ summary: 'Create role in app context' })
   @ApiResponse({ status: 201, description: 'Role created' })
   async createRole(@Param('appId') appId: string, @Body() dto: CreateRoleDto) {
@@ -25,18 +31,22 @@ export class EntitlementController {
   }
 
   @Get('apps/:appId/roles')
+  @OrgScoped()
   @ApiOperation({ summary: 'List roles for a specific app' })
-  async listRolesForApp(@Param('appId') appId: string) {
-    return this.entitlementService.listRoles(appId);
+  async listRolesForApp(@Param('appId') appId: string, @Req() req: ScopedRequest) {
+    return this.entitlementService.listRoles(appId, req.resolvedOrgId);
   }
 
   // ─── Roles (flat — list / read / update / delete) ─────────────────────────
 
   @Get('roles')
-  @ApiOperation({ summary: 'List all roles (optional appId filter)' })
+  @OrgScoped()
+  @ApiOperation({ summary: 'List all roles (optional appId/orgId filter)' })
   @ApiQuery({ name: 'appId', required: false })
-  async listRoles(@Query('appId') appId?: string) {
-    return this.entitlementService.listRoles(appId);
+  @ApiQuery({ name: 'orgId', required: false, description: 'Platform admin only — filter by org' })
+  async listRoles(@Query('appId') appId?: string, @Query('orgId') queryOrgId?: string, @Req() req?: ScopedRequest) {
+    const orgId = req?.resolvedOrgId ?? queryOrgId;
+    return this.entitlementService.listRoles(appId, orgId);
   }
 
   @Get('roles/:id')
@@ -52,6 +62,7 @@ export class EntitlementController {
   }
 
   @Delete('roles/:id')
+  @OrgWriteAccess()
   @ApiOperation({ summary: 'Delete role (non-system only)' })
   async deleteRole(@Param('id') id: string) {
     return this.entitlementService.deleteRole(id);
@@ -60,6 +71,7 @@ export class EntitlementController {
   // ─── Permissions (nested — create) ────────────────────────────────────────
 
   @Post('apps/:appId/permissions')
+  @OrgScoped()
   @ApiOperation({ summary: 'Create permission in app context' })
   @ApiResponse({ status: 201, description: 'Permission created' })
   async createPermission(@Param('appId') appId: string, @Body() dto: CreatePermissionDto) {
@@ -67,18 +79,22 @@ export class EntitlementController {
   }
 
   @Get('apps/:appId/permissions')
+  @OrgScoped()
   @ApiOperation({ summary: 'List permissions for a specific app' })
-  async listPermissionsForApp(@Param('appId') appId: string) {
-    return this.entitlementService.listPermissions(appId);
+  async listPermissionsForApp(@Param('appId') appId: string, @Req() req: ScopedRequest) {
+    return this.entitlementService.listPermissions(appId, req.resolvedOrgId);
   }
 
   // ─── Permissions (flat — list / read / update / delete) ───────────────────
 
   @Get('permissions')
-  @ApiOperation({ summary: 'List all permissions (optional appId filter)' })
+  @OrgScoped()
+  @ApiOperation({ summary: 'List all permissions (optional appId/orgId filter)' })
   @ApiQuery({ name: 'appId', required: false })
-  async listPermissions(@Query('appId') appId?: string) {
-    return this.entitlementService.listPermissions(appId);
+  @ApiQuery({ name: 'orgId', required: false, description: 'Platform admin only — filter by org' })
+  async listPermissions(@Query('appId') appId?: string, @Query('orgId') queryOrgId?: string, @Req() req?: ScopedRequest) {
+    const orgId = req?.resolvedOrgId ?? queryOrgId;
+    return this.entitlementService.listPermissions(appId, orgId);
   }
 
   @Get('permissions/:id')
@@ -94,6 +110,7 @@ export class EntitlementController {
   }
 
   @Delete('permissions/:id')
+  @OrgWriteAccess()
   @ApiOperation({ summary: 'Delete permission' })
   async deletePermission(@Param('id') id: string) {
     return this.entitlementService.deletePermission(id);
@@ -119,6 +136,7 @@ export class EntitlementController {
   // ─── User-App-Role assignment ──────────────────────────────────────────────
 
   @Post('apps/:appId/users/:userId/roles')
+  @OrgWriteAccess()
   @ApiOperation({ summary: 'Assign role to user in app context' })
   async assignUserRole(
     @Param('appId') appId: string,
@@ -131,6 +149,7 @@ export class EntitlementController {
   // ─── Access bindings ───────────────────────────────────────────────────────
 
   @Post('apps/:appId/bindings')
+  @OrgWriteAccess()
   @ApiOperation({ summary: 'Create access binding' })
   async createBinding(
     @Param('appId') appId: string,
@@ -145,6 +164,15 @@ export class EntitlementController {
   @ApiOperation({ summary: 'List access bindings for app' })
   async listBindings(@Param('appId') appId: string) {
     return this.entitlementService.listBindings(appId);
+  }
+
+  // ─── App Users (SDK-registered) ───────────────────────────────────────────
+
+  @Get('apps/:appId/users')
+  @OrgScoped()
+  @ApiOperation({ summary: 'List SDK-registered users for an app' })
+  async listAppUsers(@Param('appId') appId: string) {
+    return this.entitlementService.listAppUsers(appId);
   }
 
   // ─── Entitlement resolution ────────────────────────────────────────────────

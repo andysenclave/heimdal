@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,6 +25,8 @@ import {
 } from '@api/hooks/useApplications';
 import type { CreateAppPayload, UpdateAppPayload, CreatedApplication } from '@api/hooks/useApplications';
 import { useOrganizations } from '@api/hooks/useOrganizations';
+import { useActiveOrg } from '@/context/OrgContext';
+import { ROUTES } from '@lib/constants';
 import { formatDate } from '@lib/format';
 import { useDebounce } from '@hooks/useDebounce';
 import type { Application } from '@/types/models';
@@ -262,14 +265,16 @@ function EditAppModal({
 // --- Page ---
 
 export default function Applications() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [editApp, setEditApp] = useState<Application | null>(null);
   const [deleteApp, setDeleteApp] = useState<Application | null>(null);
 
+  const { activeOrg } = useActiveOrg();
   const debouncedSearch = useDebounce(search, 250);
-  const { data, isLoading } = useApplications();
+  const { data, isLoading } = useApplications(activeOrg?.id);
   const deleteAppMutation = useDeleteApplication();
 
   const apps = data?.data ?? [];
@@ -311,6 +316,8 @@ export default function Applications() {
           <div className="font-mono text-[11px] text-deco-text-dim">{row.appId}</div>
         </div>
       ),
+      sortable: true,
+      sortValue: (row) => row.name,
     },
     {
       key: 'org',
@@ -324,20 +331,36 @@ export default function Applications() {
       key: 'roles',
       header: 'Roles',
       cell: (row) => (
-        <span className="font-mono text-sm font-semibold text-deco-teal">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(ROUTES.ROLES);
+          }}
+          className="font-mono text-sm font-semibold text-deco-teal hover:underline cursor-pointer transition-colors"
+          title="View roles for this application"
+        >
           {row._count?.roles ?? 0}
-        </span>
+        </button>
       ),
       className: 'w-[70px] text-center',
       headerClassName: 'text-center',
+      sortable: true,
+      sortValue: (row) => row._count?.roles ?? 0,
     },
     {
       key: 'permissions',
       header: 'Perms',
       cell: (row) => (
-        <span className="font-mono text-sm font-semibold text-deco-purple">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(ROUTES.PERMISSIONS);
+          }}
+          className="font-mono text-sm font-semibold text-deco-purple hover:underline cursor-pointer transition-colors"
+          title="View permissions for this application"
+        >
           {row._count?.permissions ?? 0}
-        </span>
+        </button>
       ),
       className: 'w-[70px] text-center',
       headerClassName: 'text-center',
@@ -372,6 +395,8 @@ export default function Applications() {
         </span>
       ),
       className: 'w-[120px]',
+      sortable: true,
+      sortValue: (row) => new Date(row.createdAt),
     },
     {
       key: 'actions',

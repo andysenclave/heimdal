@@ -1,13 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@api/client';
 import { queryKeys } from '@lib/queryKeys';
-import type { Role } from '@/types/models';
+import type { Role, Permission } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
-async function fetchRoles(appId?: string): Promise<PaginatedResponse<Role>> {
-  const searchParams = appId ? { appId } : undefined;
+async function fetchRoles(appId?: string, orgId?: string): Promise<PaginatedResponse<Role>> {
+  const searchParams: Record<string, string> = {};
+  if (appId) searchParams.appId = appId;
+  if (orgId) searchParams.orgId = orgId;
   const roles = await api
-    .get('admin/roles', { searchParams, retry: 0, timeout: 5000 })
+    .get('admin/roles', {
+      searchParams: Object.keys(searchParams).length ? searchParams : undefined,
+      retry: 0,
+      timeout: 5000,
+    })
     .json<Role[]>();
   return { data: roles, total: roles.length, page: 1, pageSize: roles.length };
 }
@@ -20,7 +26,7 @@ export interface CreateRolePayload {
   name: string;
   orgId: string;
   appId: string;
-  parentRoleId?: string;
+  baseRoleId?: string;
   description?: string;
 }
 
@@ -42,10 +48,14 @@ async function deleteRole(id: string): Promise<void> {
   await api.delete(`admin/roles/${id}`);
 }
 
-export function useRoles(appId?: string) {
+export function useRoles(appId?: string, orgId?: string) {
   return useQuery({
-    queryKey: appId ? queryKeys.roles.byApp(appId) : queryKeys.roles.all,
-    queryFn: () => fetchRoles(appId),
+    queryKey: appId
+      ? queryKeys.roles.byApp(appId)
+      : orgId
+        ? queryKeys.roles.byOrg(orgId)
+        : queryKeys.roles.all,
+    queryFn: () => fetchRoles(appId, orgId),
   });
 }
 
@@ -85,5 +95,58 @@ export function useDeleteRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
     },
+  });
+}
+
+export function useAssignPermissions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      roleId,
+      permissionIds,
+    }: {
+      roleId: string;
+      permissionIds: string[];
+    }) => {
+      return api
+        .post(`admin/roles/${roleId}/permissions`, { json: { permissionIds } })
+        .json<Role>();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+    },
+  });
+}
+
+export function useRemovePermissionFromRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      roleId,
+      permissionId,
+    }: {
+      roleId: string;
+      permissionId: string;
+    }) => {
+      await api.delete(`admin/roles/${roleId}/permissions/${permissionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+    },
+  });
+}
+
+export function useRoleWithPermissions(roleId: string) {
+  return useQuery({
+    queryKey: [...queryKeys.roles.detail(roleId), 'permissions'],
+    queryFn: () =>
+      api
+        .get(`admin/roles/${roleId}`)
+        .json<
+          Role & {
+            rolePermissions?: { permission: Permission }[];
+          }
+        >(),
+    enabled: !!roleId,
   });
 }

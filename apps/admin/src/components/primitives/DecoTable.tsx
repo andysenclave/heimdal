@@ -1,5 +1,6 @@
 import { cn } from '@lib/cn';
 import type { ReactNode } from 'react';
+import { useState, useMemo } from 'react';
 
 /** Column definition for DecoTable */
 export interface DecoColumnDef<T> {
@@ -8,6 +9,8 @@ export interface DecoColumnDef<T> {
   cell: (row: T) => ReactNode;
   className?: string;
   headerClassName?: string;
+  sortable?: boolean;
+  sortValue?: (row: T) => string | number | Date | null | undefined;
 }
 
 interface DecoTableProps<T> {
@@ -19,6 +22,46 @@ interface DecoTableProps<T> {
 }
 
 export function DecoTable<T>({ columns, data, rowKey, onRowClick, className }: DecoTableProps<T>) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (columnKey: string) => {
+    if (sortKey === columnKey) {
+      if (sortDir === 'asc') {
+        setSortDir('desc');
+      } else {
+        // Reset sort
+        setSortKey(null);
+        setSortDir('asc');
+      }
+    } else {
+      setSortKey(columnKey);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortKey) return data;
+    const col = columns.find((c) => c.key === sortKey);
+    if (!col?.sortValue) return data;
+
+    return [...data].sort((a, b) => {
+      const aVal = col.sortValue!(a);
+      const bVal = col.sortValue!(b);
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+
+      let cmp: number;
+      if (aVal instanceof Date && bVal instanceof Date) {
+        cmp = aVal.getTime() - bVal.getTime();
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        cmp = aVal - bVal;
+      } else {
+        cmp = String(aVal).localeCompare(String(bVal));
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, sortKey, sortDir, columns]);
   return (
     <div
       className={cn(
@@ -42,15 +85,28 @@ export function DecoTable<T>({ columns, data, rowKey, onRowClick, className }: D
                   className={cn(
                     'px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-deco-wide text-deco-text-copper',
                     col.headerClassName,
+                    col.sortable && 'cursor-pointer hover:text-deco-amber transition-colors',
                   )}
                 >
-                  {col.header}
+                  {col.sortable ? (
+                    <button
+                      onClick={() => handleSort(col.key)}
+                      className="flex items-center gap-1"
+                    >
+                      {col.header}
+                      <span className="text-[10px]">
+                        {sortKey === col.key ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
+                    </button>
+                  ) : (
+                    col.header
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {data.map((row) => (
+            {sortedData.map((row) => (
               <tr
                 key={rowKey(row)}
                 onClick={() => onRowClick?.(row)}

@@ -7,6 +7,7 @@ interface DecoStatCardProps {
   icon?: ReactNode;
   accent?: 'amber' | 'teal' | 'green' | 'purple' | 'red';
   className?: string;
+  onClick?: () => void;
 }
 
 const accentBg = {
@@ -33,11 +34,13 @@ const accentGlow = {
   red: 'bg-deco-red/8',
 };
 
-export function DecoStatCard({ label, value, icon, accent = 'amber', className }: DecoStatCardProps) {
+export function DecoStatCard({ label, value, icon, accent = 'amber', className, onClick }: DecoStatCardProps) {
   return (
     <div
+      onClick={onClick}
       className={cn(
         'relative overflow-hidden rounded-md border border-deco-border bg-deco-surface p-5 shadow-deco-card',
+        onClick && 'cursor-pointer transition-colors hover:bg-deco-surface-hover',
         className,
       )}
     >

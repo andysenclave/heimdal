@@ -1,3 +1,5 @@
+import type { HeimdalRole } from '@heimdal/shared';
+
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
@@ -11,6 +13,13 @@ export interface ApiError {
   error?: string;
 }
 
+/** Minimum app reference returned in session / stored in AppContext */
+export interface AppRef {
+  id: string;
+  name: string;
+  appId: string;
+}
+
 // Shape returned by GET /api/v1/auth/session
 export interface SessionResponse {
   user: {
@@ -18,6 +27,7 @@ export interface SessionResponse {
     email: string;
     name: string | null;
     emailVerified: boolean;
+    isHeimdalAdmin: boolean;
     createdAt: string;
   };
   session: {
@@ -27,6 +37,14 @@ export interface SessionResponse {
     roles: string[];
     expiresAt: string;
   };
+  systemRole: HeimdalRole;
+  org: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  /** Non-null only for org members whose OrgMembership.appId is set */
+  boundApp: AppRef | null;
 }
 
 // Flat user shape used throughout the admin UI
@@ -36,6 +54,17 @@ export interface AuthUser {
   name: string | null;
   orgId: string;
   roles: string[];
+  systemRole: HeimdalRole;
+  isHeimdalAdmin: boolean;
+  /** The user's OrgMembership role within their bound org: owner | admin | member */
+  orgMembershipRole: 'owner' | 'admin' | 'member';
+  org: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  /** Non-null only for org members. Used to auto-bind their app in AppContext. */
+  boundApp: AppRef | null;
 }
 
 // Shape returned by POST /api/v1/auth/login and /auth/signup
