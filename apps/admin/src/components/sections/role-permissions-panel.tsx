@@ -24,7 +24,7 @@ export function RolePermissionsPanel({
   onClose,
   role,
 }: RolePermissionsPanelProps) {
-  // Fetch full role data including its permission assignments
+  // Fetch full role data including direct + inherited permissions
   const { data: roleDetail, isLoading: roleLoading } = useRoleWithPermissions(
     role.id,
   );
@@ -33,8 +33,8 @@ export function RolePermissionsPanel({
   const { data: allPermsData } = usePermissions(role.appId);
   const allPerms = allPermsData?.data ?? [];
 
-  // Currently assigned permissions from role detail
-  const assignedPermIds = useMemo(
+  // Directly assigned permission IDs
+  const directPermIds = useMemo(
     () =>
       new Set(
         (roleDetail?.rolePermissions ?? []).map((rp) => rp.permission.id),
@@ -42,12 +42,25 @@ export function RolePermissionsPanel({
     [roleDetail],
   );
 
+  // Inherited permission IDs (from base role chain)
+  const inheritedPermIds = useMemo(
+    () => new Set((roleDetail?.inheritedPermissions ?? []).map((p) => p.id)),
+    [roleDetail],
+  );
+
+  const effectiveCount = directPermIds.size + inheritedPermIds.size;
+
   const assignMutation = useAssignPermissions();
   const removeMutation = useRemovePermissionFromRole();
 
   const handleToggle = async (permId: string) => {
-    if (assignedPermIds.has(permId)) {
-      // Remove
+    // Can't toggle inherited permissions — they come from the base role
+    if (inheritedPermIds.has(permId)) {
+      decoToast.error('This permission is inherited from the base role. Edit the base role to change it.');
+      return;
+    }
+
+    if (directPermIds.has(permId)) {
       try {
         await removeMutation.mutateAsync({
           roleId: role.id,
@@ -58,7 +71,6 @@ export function RolePermissionsPanel({
         decoToast.error('Failed to remove permission');
       }
     } else {
-      // Assign (single)
       try {
         await assignMutation.mutateAsync({
           roleId: role.id,
@@ -99,12 +111,25 @@ export function RolePermissionsPanel({
                 SYSTEM
               </DecoBadge>
             )}
+            {roleDetail?.baseRole && (
+              <span className="font-mono text-[10px] text-deco-text-dim">
+                inherits from{' '}
+                <span className="text-deco-teal">{roleDetail.baseRole.name}</span>
+              </span>
+            )}
           </div>
         </div>
 
         {/* Stats */}
-        <div className="font-mono text-[11px] text-deco-text-dim">
-          {assignedPermIds.size} of {allPerms.length} permissions assigned
+        <div className="flex items-center gap-3 font-mono text-[11px] text-deco-text-dim">
+          <span>
+            {effectiveCount} effective permissions
+          </span>
+          {inheritedPermIds.size > 0 && (
+            <span className="text-deco-teal">
+              ({directPermIds.size} direct + {inheritedPermIds.size} inherited)
+            </span>
+          )}
         </div>
 
         {/* Permission list */}
@@ -121,31 +146,43 @@ export function RolePermissionsPanel({
         ) : (
           <div className="max-h-[360px] overflow-y-auto space-y-1 pr-1">
             {allPerms.map((perm) => {
-              const isAssigned = assignedPermIds.has(perm.id);
+              const isDirect = directPermIds.has(perm.id);
+              const isInherited = inheritedPermIds.has(perm.id);
+              const isActive = isDirect || isInherited;
+
               return (
                 <button
                   key={perm.id}
                   onClick={() => !isLoading && handleToggle(perm.id)}
                   disabled={isLoading || role.isSystem}
                   className={`flex w-full items-center gap-3 rounded border px-3 py-2 text-left transition-colors ${
-                    isAssigned
+                    isDirect
                       ? 'border-deco-amber/30 bg-deco-amber/8 text-deco-text'
-                      : 'border-deco-border bg-transparent text-deco-text-soft hover:border-deco-border-dim'
+                      : isInherited
+                        ? 'border-deco-teal/30 bg-deco-teal/8 text-deco-text'
+                        : 'border-deco-border bg-transparent text-deco-text-soft hover:border-deco-border-dim'
                   } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
                   {/* Checkbox indicator */}
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
-                      isAssigned
+                      isDirect
                         ? 'border-deco-amber bg-deco-amber text-[#0A0A0C]'
-                        : 'border-deco-border bg-transparent text-transparent'
+                        : isInherited
+                          ? 'border-deco-teal bg-deco-teal text-[#0A0A0C]'
+                          : 'border-deco-border bg-transparent text-transparent'
                     }`}
                   >
-                    ✓
+                    {isActive ? '✓' : ''}
                   </span>
                   <span className="font-mono text-[12px] font-bold">
                     {perm.key}
                   </span>
+                  {isInherited && (
+                    <DecoBadge variant="teal" size="sm">
+                      inherited
+                    </DecoBadge>
+                  )}
                   {perm.description && (
                     <span className="ml-auto text-[11px] text-deco-text-dim">
                       {perm.description}
@@ -160,6 +197,12 @@ export function RolePermissionsPanel({
         {role.isSystem && (
           <div className="rounded border border-deco-amber/20 bg-deco-amber/5 px-3 py-2 font-mono text-[11px] text-deco-amber">
             System role permissions cannot be modified.
+          </div>
+        )}
+
+        {inheritedPermIds.size > 0 && (
+          <div className="rounded border border-deco-teal/20 bg-deco-teal/5 px-3 py-2 font-mono text-[11px] text-deco-teal">
+            Teal permissions are inherited from the base role chain and cannot be removed here.
           </div>
         )}
       </div>

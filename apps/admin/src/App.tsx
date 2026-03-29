@@ -38,8 +38,20 @@ export default function App() {
           <RouterProvider router={router} />
           <Toaster
             position="bottom-right"
+            duration={10000}
+            gap={8}
             toastOptions={{
-              className: 'font-mono text-xs',
+              className:
+                'font-mono text-[12px] !rounded-md !px-4 !py-3 !shadow-lg !border',
+              classNames: {
+                success:
+                  '!bg-emerald-950/90 !text-emerald-200 !border-emerald-700/50',
+                error:
+                  '!bg-red-950/90 !text-red-200 !border-red-700/50',
+                warning:
+                  '!bg-amber-950/90 !text-amber-200 !border-amber-700/50',
+                info: '!bg-sky-950/90 !text-sky-200 !border-sky-700/50',
+              },
             }}
           />
           </AppProvider>

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './common/prisma';
@@ -17,6 +17,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HeimdalRolesGuard } from './common/guards/heimdal-roles.guard';
 import { OrgScopeGuard } from './common/guards/org-scope.guard';
 import { OrgMembershipGuard } from './common/guards/org-membership.guard';
+import { TenantInterceptor } from './common/tenant';
 
 @Module({
   imports: [
@@ -43,6 +44,8 @@ import { OrgMembershipGuard } from './common/guards/org-membership.guard';
     { provide: APP_GUARD, useClass: HeimdalRolesGuard },
     { provide: APP_GUARD, useClass: OrgScopeGuard },
     { provide: APP_GUARD, useClass: OrgMembershipGuard },
+    // HD-017: Tenant isolation — wraps request in AsyncLocalStorage with orgId
+    { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
   ],
 })
 export class AppModule {}

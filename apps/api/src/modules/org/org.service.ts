@@ -200,6 +200,21 @@ export class OrgService {
       throw new NotFoundException('Member not found in this organization');
     }
 
+    // Prevent downgrading the last admin/owner — org must keep at least one admin-level member
+    if (
+      (membership.role === 'owner' || membership.role === 'admin') &&
+      role === 'member'
+    ) {
+      const adminCount = await this.prisma.orgMembership.count({
+        where: { orgId, role: { in: ['owner', 'admin'] } },
+      });
+      if (adminCount <= 1) {
+        throw new ForbiddenException(
+          'Cannot downgrade the last admin. Promote another member first.',
+        );
+      }
+    }
+
     const updated = await this.prisma.orgMembership.update({
       where: { id: membership.id },
       data: { role },
