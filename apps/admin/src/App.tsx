@@ -5,7 +5,7 @@ import { AuthProvider } from '@auth/AuthProvider';
 import { OrgProvider } from '@/context/OrgContext';
 import { AppProvider } from '@/context/AppContext';
 import { router } from '@/router/routes';
-import { useThemeStore } from '@lib/stores/themeStore';
+import { useThemeStore } from '@lib/stores/theme-store';
 import { useEffect } from 'react';
 
 const queryClient = new QueryClient({

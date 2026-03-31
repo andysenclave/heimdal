@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@api/client';
-import { queryKeys } from '@lib/queryKeys';
+import { queryKeys } from '@lib/query-keys';
 import type { AuditLogEntry } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 

@@ -1,5 +1,5 @@
 import ky from 'ky';
-import { tokenStore } from './tokenStore';
+import { tokenStore } from './token-store';
 
 let isRefreshing = false;
 

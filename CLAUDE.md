@@ -27,6 +27,7 @@ When making architectural decisions, **read the relevant prompt file** from `doc
 | Choosing state management approach | `docs/coding-prompts/16-state-management-decisions.md` |
 | Handling errors (frontend + backend) | `docs/coding-prompts/17-error-handling-patterns.md` |
 | Understanding data flow layers | `docs/coding-prompts/18-data-flow-architecture.md` |
+| Naming any file or folder | `docs/coding-prompts/19-file-and-folder-naming.md` |
 
 ---
 
@@ -92,19 +93,31 @@ modules/auth/
 
 ## 3. File & Folder Naming
 
+> **Full rules:** `docs/coding-prompts/19-file-and-folder-naming.md` — read it before creating any file.
+
+### Backend (`apps/api/`, `packages/`)
+
 | Type | Convention | Example |
 |------|-----------|---------|
 | Folders | `kebab-case` | `prisma-client/`, `access-binding/` |
-| Files (backend) | `kebab-case.suffix.ts` | `auth.controller.ts`, `signup.dto.ts` |
-| Files (frontend) | `kebab-case.tsx` for components | `stat-card.tsx`, `guard-tester.tsx` |
+| All `.ts` files | `kebab-case.suffix.ts` | `auth.controller.ts`, `signup.dto.ts` |
 | Classes | `PascalCase` | `AuthService`, `CreateOrgDto` |
-| Interfaces | `PascalCase` | `GuardCheckRequest` (no `I` prefix) |
+| Interfaces | `PascalCase` (no `I` prefix) | `GuardCheckRequest` |
 | Constants | `UPPER_SNAKE_CASE` | `API_VERSION`, `PERMISSION_PATTERN` |
 | Functions | `camelCase` | `isValidPermission()`, `resolveRoles()` |
 | Test files | `*.spec.ts` | `auth.service.spec.ts` |
 | Type-only files | `*.types.ts` | `entitlement.types.ts` |
 
-**Never:** `AuthControllerFile.ts`, `IGuardRequest`, `my_util.ts`
+### Frontend (`apps/admin/`)
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Component files | `PascalCase.tsx` | `CodexVersionBar.tsx`, `AppSelector.tsx` |
+| Hook files (`use*`) | `useXxx.ts` (camelCase) | `useDebounce.ts`, `useCodexVersions.ts` |
+| All other `.ts` files | `kebab-case.ts` | `query-keys.ts`, `token-store.ts` |
+
+**Never (backend):** `AuthService.ts`, `IGuardRequest`, `my_util.ts`
+**Never (frontend):** `codex-version-bar.tsx`, `use-debounce.ts`, `QueryKeys.ts`
 
 ---
 

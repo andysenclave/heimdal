@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@api/client';
-import { queryKeys } from '@lib/queryKeys';
+import { queryKeys } from '@lib/query-keys';
 import type { OrgMembership } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 

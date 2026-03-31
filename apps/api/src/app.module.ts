@@ -9,7 +9,7 @@ import { ApplicationModule } from './modules/application';
 import { EntitlementModule } from './modules/entitlement';
 import { InviteModule } from './modules/invite';
 import { GuardModule } from './modules/guard';
-import { CmsModule } from './modules/cms';
+import { CodexModule } from './modules/codex';
 import { AuditModule } from './modules/audit';
 import { DashboardModule } from './modules/dashboard';
 import { SdkModule } from './modules/sdk';
@@ -32,7 +32,7 @@ import { TenantInterceptor } from './common/tenant';
     EntitlementModule,
     InviteModule,
     GuardModule,
-    CmsModule,
+    CodexModule,
     AuditModule,
     DashboardModule,
     SdkModule,

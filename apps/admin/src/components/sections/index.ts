@@ -1,6 +1,6 @@
-export { CreateOrgModal } from './create-org-modal';
-export { EditOrgModal } from './edit-org-modal';
-export { OrganizationsTable } from './organizations-table';
-export { RolePermissionsPanel } from './role-permissions-panel';
-export { CommandPalette } from './command-palette';
-export { AppSelector } from './app-selector';
+export { CreateOrgModal } from './CreateOrgModal';
+export { EditOrgModal } from './EditOrgModal';
+export { OrganizationsTable } from './OrganizationsTable';
+export { RolePermissionsPanel } from './RolePermissionsPanel';
+export { CommandPalette } from './CommandPalette';
+export { AppSelector } from './AppSelector';
