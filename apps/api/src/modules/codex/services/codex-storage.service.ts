@@ -8,7 +8,6 @@ let sharp:
   | ((input: Buffer) => { resize: (w: number) => { toBuffer: () => Promise<Buffer> } })
   | undefined;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   sharp = require('sharp');
 } catch {
   sharp = undefined;

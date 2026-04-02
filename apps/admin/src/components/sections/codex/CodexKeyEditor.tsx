@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react';
 import type { CodexRegion } from '@api/codex-types';
 
 const C = {
@@ -33,10 +34,27 @@ export interface CodexKeyEditorProps {
   region: CodexRegion | null;
   onConfirm: (id: string) => void;
   onIgnore: (id: string) => void;
-  onValueChange?: (id: string, value: string) => void;
+  onValueChange: (regionId: string, newValue: string) => void;
+  isDraft: boolean;
 }
 
-export function CodexKeyEditor({ region, onConfirm, onIgnore, onValueChange }: CodexKeyEditorProps) {
+export function CodexKeyEditor({ region, onConfirm, onIgnore, onValueChange, isDraft }: CodexKeyEditorProps) {
+  const [isDirty, setIsDirty] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setIsDirty(true);
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        if (region) onValueChange(region.id, newValue);
+      }, 300);
+    },
+    [region, onValueChange],
+  );
+
   if (!region) {
     return (
       <div style={{
@@ -63,6 +81,13 @@ export function CodexKeyEditor({ region, onConfirm, onIgnore, onValueChange }: C
           fontFamily: F.display, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
           color: C.text, margin: 0,
         }}>Key Editor</h3>
+        {!isDraft && (
+          <span style={{
+            marginLeft: 'auto', padding: '1px 6px', borderRadius: 3,
+            background: `${C.textDim}18`, border: `1px solid ${C.textDim}30`,
+            fontFamily: F.mono, fontSize: 9, color: C.textDim, letterSpacing: '0.08em',
+          }}>READ ONLY</span>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -85,15 +110,23 @@ export function CodexKeyEditor({ region, onConfirm, onIgnore, onValueChange }: C
             letterSpacing: '0.1em', color: C.textDim, marginBottom: 4, display: 'block',
           }}>
             Value <span style={{ color: C.teal }}>(extracted)</span>
+            {isDirty && isDraft && (
+              <span style={{ marginLeft: 6, color: C.amber, fontSize: 11 }}>•</span>
+            )}
           </label>
           <input
+            key={region.id}
             defaultValue={region.extractedText ?? ''}
-            onChange={(e) => onValueChange?.(region.id, e.target.value)}
+            onChange={handleChange}
+            disabled={!isDraft}
             style={{
               width: '100%', padding: '8px 10px', borderRadius: 4,
-              border: `1px solid ${C.border}`, background: C.bg,
-              fontFamily: F.sans, fontSize: 13, color: C.text,
+              border: `1px solid ${isDirty && isDraft ? `${C.amber}60` : C.border}`,
+              background: C.bg,
+              fontFamily: F.sans, fontSize: 13, color: isDraft ? C.text : C.textDim,
               outline: 'none', boxSizing: 'border-box' as const,
+              cursor: isDraft ? 'text' : 'not-allowed',
+              opacity: isDraft ? 1 : 0.6,
             }}
           />
         </div>

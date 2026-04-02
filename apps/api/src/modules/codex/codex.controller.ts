@@ -58,11 +58,13 @@ export class CodexController {
   // ── Version routes ─────────────────────────────────────────────────
 
   @Post('admin/apps/:appId/codex/versions')
-  createVersion(
+  async createVersion(
     @Param('appId') appId: string,
     @Body() dto: CreateCodexVersionDto,
     @CurrentUser() user: HeimdalJwtClaims,
   ) {
+    // Ensure a base locale exists before creating a version
+    await this.localeService.ensureBaseLocale(appId);
     return this.versionService.createVersion(appId, user.org, user.sub, dto);
   }
 
@@ -326,10 +328,39 @@ export class CodexController {
       });
     }
 
+    // Persist the generated content tree for the base locale
+    if (analysis.contentTree && Object.keys(analysis.contentTree).length > 0) {
+      const screenWithVersion = await this.prisma.codexScreen.findUnique({
+        where: { id: screenId },
+        include: { version: true },
+      });
+
+      const baseLocale = await this.prisma.codexLocale.findFirst({
+        where: { appId: screenWithVersion?.version.appId, isBase: true },
+      });
+
+      const locale = baseLocale?.locale ?? 'en';
+
+      await this.prisma.codexContent.upsert({
+        where: {
+          screenId_locale: { screenId, locale },
+        },
+        create: {
+          screenId,
+          locale,
+          contentTree: analysis.contentTree as Prisma.InputJsonValue,
+        },
+        update: {
+          contentTree: analysis.contentTree as Prisma.InputJsonValue,
+        },
+      });
+    }
+
     return {
       screenType: analysis.screenType,
       confidence: analysis.confidence,
       regionCount: analysis.regions.length,
+      regions: analysis.regions,
       sections: analysis.sections,
       contentTree: analysis.contentTree,
     };

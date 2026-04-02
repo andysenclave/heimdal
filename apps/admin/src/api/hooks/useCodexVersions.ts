@@ -35,6 +35,7 @@ export function useCreateCodexVersion(appId: string) {
     mutationFn: (payload: CreateVersionPayload) => createVersion(appId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
+      toast.success('Version created');
     },
     onError: () => toast.error('Failed to create version'),
   });
@@ -46,6 +47,7 @@ export function useDeleteCodexVersion(appId: string) {
     mutationFn: deleteVersion,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
+      toast.success('Version deleted');
     },
     onError: () => toast.error('Failed to delete version'),
   });

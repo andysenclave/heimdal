@@ -28,6 +28,7 @@ export function useSubmitForReview(appId: string) {
     onSuccess: (_, { versionId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.version(versionId) });
+      toast.success('Version submitted for review');
     },
     onError: () => toast.error('Failed to submit version for review'),
   });
@@ -40,6 +41,7 @@ export function useApproveVersion(appId: string) {
     onSuccess: (_, versionId) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.version(versionId) });
+      toast.success('Version approved and published');
     },
     onError: () => toast.error('Failed to approve version'),
   });
@@ -53,6 +55,7 @@ export function useRejectVersion(appId: string) {
     onSuccess: (_, { versionId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.version(versionId) });
+      toast.success('Version rejected — returned to DRAFT');
     },
     onError: () => toast.error('Failed to reject version'),
   });
@@ -65,6 +68,7 @@ export function useRollbackVersion(appId: string) {
     onSuccess: (_, versionId) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.versions(appId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.version(versionId) });
+      toast.success('Version rolled back successfully');
     },
     onError: () => toast.error('Failed to rollback version'),
   });

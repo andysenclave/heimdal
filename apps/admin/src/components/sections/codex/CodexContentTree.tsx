@@ -13,17 +13,23 @@ const F = {
 };
 
 function TreeNode({
-  k, v, path, depth, selectedKey,
+  k, v, path, depth, selectedKey, editedValues,
 }: {
   k: string;
   v: unknown;
   path: string;
   depth: number;
   selectedKey?: string | null;
+  editedValues?: Record<string, string>;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const isObj = v !== null && typeof v === 'object' && !Array.isArray(v);
   const hl = selectedKey != null && path === selectedKey;
+
+  // For leaf nodes, check if there's a local edit overlay
+  const editedValue = !isObj && editedValues ? editedValues[path] : undefined;
+  const displayValue = editedValue !== undefined ? editedValue : String(v);
+  const isModified = editedValue !== undefined;
 
   return (
     <div>
@@ -50,14 +56,25 @@ function TreeNode({
           <>
             <span style={{ color: C.textDim, fontFamily: 'monospace', fontSize: 11 }}>:</span>
             <span style={{
-              fontFamily: F.sans, fontSize: 11, color: C.textSoft,
+              fontFamily: F.sans, fontSize: 11,
+              color: isModified ? C.amber : C.textSoft,
+              fontStyle: isModified ? 'italic' : 'normal',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260,
-            }}>"{String(v)}"</span>
+            }}>"{displayValue}"</span>
+            {isModified && (
+              <span style={{ color: C.amber, fontSize: 9, fontFamily: F.mono, flexShrink: 0 }}>•</span>
+            )}
           </>
         )}
       </div>
       {isObj && !collapsed && Object.entries(v as Record<string, unknown>).map(([ck, cv]) => (
-        <TreeNode key={ck} k={ck} v={cv} path={`${path}.${ck}`} depth={depth + 1} selectedKey={selectedKey} />
+        <TreeNode
+          key={ck} k={ck} v={cv}
+          path={`${path}.${ck}`}
+          depth={depth + 1}
+          selectedKey={selectedKey}
+          editedValues={editedValues}
+        />
       ))}
     </div>
   );
@@ -66,6 +83,7 @@ function TreeNode({
 export interface CodexContentTreeProps {
   tree: Record<string, unknown>;
   selectedKey?: string | null;
+  editedValues?: Record<string, string>;
   onTranslate?: () => void;
   versionId?: string;
   availableLocales?: string[];
@@ -75,6 +93,7 @@ export interface CodexContentTreeProps {
 export function CodexContentTree({
   tree,
   selectedKey,
+  editedValues,
   onTranslate,
   versionId,
   availableLocales,
@@ -131,7 +150,11 @@ export function CodexContentTree({
       </div>
       <div style={{ padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
         {Object.entries(tree).map(([k, v]) => (
-          <TreeNode key={k} k={k} v={v} path={k} depth={0} selectedKey={selectedKey} />
+          <TreeNode
+            key={k} k={k} v={v} path={k} depth={0}
+            selectedKey={selectedKey}
+            editedValues={editedValues}
+          />
         ))}
       </div>
     </div>

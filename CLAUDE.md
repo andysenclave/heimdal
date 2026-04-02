@@ -28,6 +28,10 @@ When making architectural decisions, **read the relevant prompt file** from `doc
 | Handling errors (frontend + backend) | `docs/coding-prompts/17-error-handling-patterns.md` |
 | Understanding data flow layers | `docs/coding-prompts/18-data-flow-architecture.md` |
 | Naming any file or folder | `docs/coding-prompts/19-file-and-folder-naming.md` |
+| **Building a page (SRP, composition limits)** | `docs/coding-prompts/20-page-composition-and-srp.md` |
+| **Making API calls from frontend** | `docs/coding-prompts/21-api-client-and-network-discipline.md` |
+| **Styling components (no inline styles)** | `docs/coding-prompts/22-no-inline-styles-or-hardcoded-tokens.md` |
+| **Dialog/modal management in pages** | `docs/coding-prompts/23-dialog-provider-pattern.md` |
 
 ---
 
@@ -313,7 +317,10 @@ components/
 - **Sections are middle ground.** They compose common components into meaningful UI blocks but don't own data fetching.
 - **Hooks extract logic.** `useGuardCheck()`, `useOrganizations()`, `useAuth()` — all data fetching and state logic lives in hooks, not in components.
 - **Props > context for component config.** Use React Context only for truly global state (theme, auth session). Everything else is props.
-- **One component per file.** Exception: tightly coupled sub-components that are never used elsewhere.
+- **One component per file.** No exceptions. If you're about to write a second `function` component in a file, create a new file instead. See `docs/coding-prompts/20-page-composition-and-srp.md`.
+- **No raw `fetch()` in components.** All HTTP calls go through the `api` client and React Query hooks. See `docs/coding-prompts/21-api-client-and-network-discipline.md`.
+- **No hardcoded colors, fonts, or massive inline styles.** Use `useTheme()` for all design tokens. See `docs/coding-prompts/22-no-inline-styles-or-hardcoded-tokens.md`.
+- **Pages stay under 150 lines.** If a page exceeds this, extract logic into hooks and UI into section components. See `docs/coding-prompts/20-page-composition-and-srp.md`.
 
 ### Hook Pattern
 ```typescript

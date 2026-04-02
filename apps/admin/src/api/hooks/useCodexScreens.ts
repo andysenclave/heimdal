@@ -40,6 +40,7 @@ export function useCreateCodexScreen(versionId: string) {
     mutationFn: (payload: CreateScreenPayload) => createScreen(versionId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.screens(versionId) });
+      toast.success('Screen created');
     },
     onError: () => toast.error('Failed to create screen'),
   });
@@ -51,6 +52,7 @@ export function useDeleteCodexScreen(versionId: string) {
     mutationFn: deleteScreen,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.codex.screens(versionId) });
+      toast.success('Screen deleted');
     },
     onError: () => toast.error('Failed to delete screen'),
   });
