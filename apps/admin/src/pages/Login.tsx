@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@api/client';
-import { tokenStore } from '@api/tokenStore';
+import { tokenStore } from '@api/token-store';
 import { useAuth } from '@auth/hooks/useAuth';
 import { loginSchema, type LoginFormData } from '@lib/validation';
 import { ROUTES } from '@lib/constants';

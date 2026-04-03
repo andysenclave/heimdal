@@ -133,7 +133,8 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
-# Vite logs files
+# Vite cache and config artifacts
+**/.vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
@@ -150,3 +151,4 @@ vite.config.ts.timestamp-*
 .idea
 resources/*
 .claude/*
+docs/*

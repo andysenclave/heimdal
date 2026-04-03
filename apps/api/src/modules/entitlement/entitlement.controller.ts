@@ -50,9 +50,9 @@ export class EntitlementController {
   }
 
   @Get('roles/:id')
-  @ApiOperation({ summary: 'Get role by ID' })
+  @ApiOperation({ summary: 'Get role by ID (includes inherited permissions from base role chain)' })
   async getRole(@Param('id') id: string) {
-    return this.entitlementService.getRole(id);
+    return this.entitlementService.resolveRolePermissions(id);
   }
 
   @Patch('roles/:id')
@@ -146,6 +146,26 @@ export class EntitlementController {
     return this.entitlementService.assignUserRole(appId, userId, roleId);
   }
 
+  @Delete('apps/:appId/users/:userId/roles/:roleId')
+  @OrgWriteAccess()
+  @ApiOperation({ summary: 'Remove role from user in app context' })
+  async removeUserRole(
+    @Param('appId') appId: string,
+    @Param('userId') userId: string,
+    @Param('roleId') roleId: string,
+  ) {
+    return this.entitlementService.removeUserRole(appId, userId, roleId);
+  }
+
+  @Get('apps/:appId/users/:userId/roles')
+  @ApiOperation({ summary: 'List roles assigned to user in app' })
+  async listUserRoles(
+    @Param('appId') appId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.entitlementService.listUserRoles(appId, userId);
+  }
+
   // ─── Access bindings ───────────────────────────────────────────────────────
 
   @Post('apps/:appId/bindings')
@@ -164,6 +184,22 @@ export class EntitlementController {
   @ApiOperation({ summary: 'List access bindings for app' })
   async listBindings(@Param('appId') appId: string) {
     return this.entitlementService.listBindings(appId);
+  }
+
+  @Patch('bindings/:bindingId')
+  @ApiOperation({ summary: 'Update access binding' })
+  async updateBinding(
+    @Param('bindingId') bindingId: string,
+    @Body() body: { resource?: string; description?: string },
+  ) {
+    return this.entitlementService.updateBinding(bindingId, body);
+  }
+
+  @Delete('bindings/:bindingId')
+  @OrgWriteAccess()
+  @ApiOperation({ summary: 'Delete access binding' })
+  async deleteBinding(@Param('bindingId') bindingId: string) {
+    return this.entitlementService.deleteBinding(bindingId);
   }
 
   // ─── App Users (SDK-registered) ───────────────────────────────────────────

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@lib/cn';
 import { ROUTES } from '@lib/constants';
-import { queryKeys } from '@lib/queryKeys';
+import { queryKeys } from '@lib/query-keys';
 import type { Organization, Application, Role } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
