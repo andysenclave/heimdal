@@ -25,7 +25,6 @@ export function Sidebar() {
       case '/permissions':    return features.canSeePermissions;
       case '/invites':        return features.canSeeInvites;
       case '/guard-tester':   return features.canSeeGuardTester;
-      case '/codex':          return features.canSeeCodex;
       case '/audit-log':      return features.canSeeAuditLog;
       default:                return true;
     }

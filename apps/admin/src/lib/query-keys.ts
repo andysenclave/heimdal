@@ -37,13 +37,4 @@ export const queryKeys = {
   dashboard: {
     stats: ['dashboard', 'stats'] as const,
   },
-  codex: {
-    versions: (appId: string) => ['codex', 'versions', appId] as const,
-    version: (versionId: string) => ['codex', 'version', versionId] as const,
-    screens: (versionId: string) => ['codex', 'screens', versionId] as const,
-    screen: (screenId: string) => ['codex', 'screen', screenId] as const,
-    content: (screenId: string, locale: string) => ['codex', 'content', screenId, locale] as const,
-    regions: (screenId: string) => ['codex', 'regions', screenId] as const,
-    locales: (appId: string) => ['codex', 'locales', appId] as const,
-  },
 };

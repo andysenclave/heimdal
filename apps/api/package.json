@@ -16,7 +16,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
     "@heimdal/prisma-client": "*",
     "@heimdal/shared": "*",
     "@nestjs/common": "^11.0.0",
@@ -25,7 +24,6 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/swagger": "^11.0.0",
-    "@types/multer": "^2.1.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.0",
     "class-validator": "^0.14.0",

@@ -6,7 +6,6 @@ export const ROUTES = {
   ROLES: '/roles',
   PERMISSIONS: '/permissions',
   GUARD_TESTER: '/guard-tester',
-  CODEX: '/codex',
   INVITES: '/invites',
   AUDIT_LOG: '/audit-log',
   PROFILE: '/profile',
@@ -23,7 +22,6 @@ export const NAV_ITEMS = [
   { path: ROUTES.PERMISSIONS, icon: '◆', label: 'Permissions' },
   { path: ROUTES.INVITES, icon: '✉', label: 'Invites' },
   { path: ROUTES.GUARD_TESTER, icon: '⊡', label: 'Guard Tester' },
-  { path: ROUTES.CODEX, icon: '⟁', label: 'Codex' },
   { path: ROUTES.AUDIT_LOG, icon: '≡', label: 'Audit Log' },
   { path: ROUTES.PROFILE, icon: '○', label: 'Profile' },
 ] as const;

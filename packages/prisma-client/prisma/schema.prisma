@@ -33,8 +33,6 @@ model Organization {
   permissions    Permission[]
   auditLogs      AuditLog[]
   invites        Invite[]
-  codexVersions  CodexVersion[]
-
   @@map("organizations")
 }
 
@@ -63,9 +61,6 @@ model Application {
   orgMemberships  OrgMembership[]
   invites         Invite[]
   appMemberships  AppMembership[]
-  codexVersions   CodexVersion[]
-  codexLocales    CodexLocale[]
-
   @@index([orgId])
   @@map("applications")
 }
@@ -97,9 +92,6 @@ model User {
   invitesSent              Invite[]         @relation("InvitesSent")
   invitesAccepted          Invite[]         @relation("InviteAccepted")
   appMemberships           AppMembership[]
-  codexVersionsCreated     CodexVersion[]   @relation("CodexVersionCreator")
-  codexVersionsReviewed    CodexVersion[]   @relation("CodexVersionReviewer")
-
   @@map("users")
 }
 
@@ -375,161 +367,3 @@ enum InviteStatus {
   REVOKED
 }
 
-// ─────────────────────────────────────────────
-// CodexVersionStatus enum
-// ─────────────────────────────────────────────
-
-enum CodexVersionStatus {
-  DRAFT
-  REVIEW
-  PUBLISHED
-  ARCHIVED
-}
-
-// ─────────────────────────────────────────────
-// CodexVersion — versioned content snapshot for an app
-// ─────────────────────────────────────────────
-
-model CodexVersion {
-  id           String             @id @default(cuid())
-  orgId        String
-  appId        String
-  version      Int
-  status       CodexVersionStatus @default(DRAFT)
-  description  String?
-  createdById  String
-  reviewedById String?
-  reviewedAt   DateTime?
-  publishedAt  DateTime?
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  org          Organization @relation(fields: [orgId], references: [id])
-  app          Application  @relation(fields: [appId], references: [id])
-  createdBy    User         @relation("CodexVersionCreator", fields: [createdById], references: [id])
-  reviewedBy   User?        @relation("CodexVersionReviewer", fields: [reviewedById], references: [id])
-  screens      CodexScreen[]
-
-  @@unique([appId, version])
-  @@index([orgId])
-  @@index([appId])
-  @@index([status])
-  @@map("codex_versions")
-}
-
-// ─────────────────────────────────────────────
-// CodexScreen — named screen within a version
-// ─────────────────────────────────────────────
-
-model CodexScreen {
-  id          String   @id @default(cuid())
-  versionId   String
-  slug        String
-  name        String
-  description String?
-  screenType  String?
-  sortOrder   Int      @default(0)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  version     CodexVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  image       CodexScreenImage?
-  regions     CodexRegion[]
-  contents    CodexContent[]
-
-  @@unique([versionId, slug])
-  @@index([versionId])
-  @@map("codex_screens")
-}
-
-// ─────────────────────────────────────────────
-// CodexScreenImage — uploaded screenshot for a screen
-// ─────────────────────────────────────────────
-
-model CodexScreenImage {
-  id           String   @id @default(cuid())
-  screenId     String   @unique
-  originalUrl  String
-  thumbnailUrl String?
-  width        Int?
-  height       Int?
-  mimeType     String?
-  sizeBytes    Int?
-  aiAnalysisId String?
-
-  createdAt    DateTime @default(now())
-
-  screen       CodexScreen @relation(fields: [screenId], references: [id], onDelete: Cascade)
-
-  @@map("codex_screen_images")
-}
-
-// ─────────────────────────────────────────────
-// CodexRegion — AI-detected text zone on a screen
-// ─────────────────────────────────────────────
-
-model CodexRegion {
-  id            String   @id @default(cuid())
-  screenId      String
-  contentKey    String
-  extractedText String?
-  confidence    Float?
-  semanticRole  String?
-  boundingBox   Json?
-  isConfirmed   Boolean  @default(false)
-  isIgnored     Boolean  @default(false)
-  userKey       String?
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  screen        CodexScreen @relation(fields: [screenId], references: [id], onDelete: Cascade)
-
-  @@unique([screenId, contentKey])
-  @@index([screenId])
-  @@map("codex_regions")
-}
-
-// ─────────────────────────────────────────────
-// CodexContent — content values per screen per locale
-// ─────────────────────────────────────────────
-
-model CodexContent {
-  id          String   @id @default(cuid())
-  screenId    String
-  locale      String
-  contentTree Json
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  screen      CodexScreen @relation(fields: [screenId], references: [id], onDelete: Cascade)
-
-  @@unique([screenId, locale])
-  @@index([screenId])
-  @@map("codex_contents")
-}
-
-// ─────────────────────────────────────────────
-// CodexLocale — configured locales per app
-// ─────────────────────────────────────────────
-
-model CodexLocale {
-  id       String   @id @default(cuid())
-  appId    String
-  locale   String
-  name     String
-  isBase   Boolean  @default(false)
-  isActive Boolean  @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  app       Application @relation(fields: [appId], references: [id], onDelete: Cascade)
-
-  @@unique([appId, locale])
-  @@index([appId])
-  @@map("codex_locales")
-}

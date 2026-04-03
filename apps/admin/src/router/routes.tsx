@@ -15,7 +15,6 @@ const Roles = lazy(() => import('@pages/Roles'));
 const Permissions = lazy(() => import('@pages/Permissions'));
 const Invites = lazy(() => import('@pages/Invites'));
 const GuardTester = lazy(() => import('@pages/GuardTester'));
-const Codex = lazy(() => import('@pages/Codex'));
 const AuditLog = lazy(() => import('@pages/AuditLog'));
 const Profile = lazy(() => import('@pages/Profile'));
 const Login = lazy(() => import('@pages/Login'));
@@ -104,14 +103,6 @@ const routes: RouteObject[] = [
         element: (
           <NotForOrgMember>
             <LazyPage><GuardTester /></LazyPage>
-          </NotForOrgMember>
-        ),
-      },
-      {
-        path: 'codex',
-        element: (
-          <NotForOrgMember>
-            <LazyPage><Codex /></LazyPage>
           </NotForOrgMember>
         ),
       },

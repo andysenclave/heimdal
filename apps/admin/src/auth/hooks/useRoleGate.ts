@@ -39,7 +39,6 @@ export function useFeatureAccess() {
       canSeeGuardTester: false,
       canSeeAuditLog: false,
       canSeeDashboard: false,
-      canSeeCodex: false,
       // Roles
       canWriteRoles: true,
       canDeleteRoles: false,
@@ -64,7 +63,6 @@ export function useFeatureAccess() {
     canSeeGuardTester: true,
     canSeeAuditLog: isPlatformAdmin,
     canSeeDashboard: true,
-    canSeeCodex: true,
     // Roles
     canWriteRoles: true,
     canDeleteRoles: true,
