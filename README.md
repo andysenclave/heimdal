@@ -324,11 +324,11 @@ docker-compose down      # Stop all services
 ## Branch Strategy
 
 ```
-main (production)           heimdal.thimple.in
+master (production)         admin.heimdal.in / api.heimdal.in
   |
-  staging (UAT)             staging.heimdal.thimple.in
+  release/* (UAT)           admin-qa.heimdal.in / api-qa.heimdal.in
     |
-    develop (integration)
+    develop (integration)   admin-dev.heimdal.in / api-dev.heimdal.in
       |
       HD-XXX-feature        Feature branches
 ```

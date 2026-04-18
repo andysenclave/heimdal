@@ -1,5 +1,9 @@
 # Heimdal — Render Blueprint (Infrastructure as Code)
 # Docs: https://render.com/docs/blueprint-spec
+#
+# NOTE: Database is NOT provisioned here — we use Neon (https://neon.tech) for
+# PostgreSQL. Set DATABASE_URL manually in the Render dashboard for each
+# environment (production, QA). See docs/deployment/02-DATABASE-STRATEGY.md.
 
 services:
   # ─── API Service (NestJS) ─────────────────────────────────────────────────
@@ -9,18 +13,19 @@ services:
     dockerfilePath: apps/api/Dockerfile
     dockerContext: .
     plan: starter
-    region: oregon
+    region: singapore
     branch: master
     healthCheckPath: /api/v1/health
+    # Runs Prisma migrations before each deploy
+    preDeployCommand: npx prisma migrate deploy --schema=packages/prisma-client/prisma/schema.prisma
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "8000"
+      # DATABASE_URL points to Neon — set manually in Render dashboard
       - key: DATABASE_URL
-        fromDatabase:
-          name: heimdal-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRY
@@ -28,11 +33,22 @@ services:
       - key: REFRESH_TOKEN_EXPIRY
         value: 7d
       - key: CORS_ORIGINS
-        value: https://heimdal-admin.onrender.com
-      - key: ADMIN_BOOTSTRAP_EMAIL
+        value: https://admin.heimdal.in
+      - key: APP_URL
+        value: https://admin.heimdal.in
+      # Email (Resend SMTP) — set manually in Render dashboard
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_USER
         sync: false
-      - key: ADMIN_BOOTSTRAP_PASSWORD
+      - key: SMTP_PASS
         sync: false
+      - key: SMTP_FROM
+        value: noreply@heimdal.in
+      # Bootstrap admin — used only by seed script (prisma db seed)
+      # Run locally, not needed as Render env vars. See docs/deployment/07-DEPLOYMENT-RUNBOOK.md
 
   # ─── Admin UI (Vite SPA) ─────────────────────────────────────────────────
   - type: web
@@ -45,19 +61,19 @@ services:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
-      - key: VITE_API_URL
-        value: https://heimdal-api.onrender.com
-
-# ─── Database ──────────────────────────────────────────────────────────────
-databases:
-  - name: heimdal-db
-    plan: starter
-    databaseName: heimdal
-    user: heimdal
-    region: oregon
-    postgresMajorVersion: "16"
+      - key: VITE_API_BASE_URL
+        value: https://api.heimdal.in

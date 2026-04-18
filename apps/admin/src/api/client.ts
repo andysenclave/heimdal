@@ -3,8 +3,21 @@ import { tokenStore } from './token-store';
 
 let isRefreshing = false;
 
+/**
+ * Base URL resolution:
+ * - Production (VITE_API_BASE_URL set): absolute URL to the API service
+ *   e.g. `https://api.heimdal.in/api/v1`
+ * - Development (unset): relative path, relies on the Vite dev proxy which
+ *   forwards `/api/*` → `http://localhost:8000`
+ *
+ * Trailing slash on prefixUrl is required by ky.
+ */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')}/api/v1/`
+  : '/api/v1/';
+
 export const api = ky.create({
-  prefixUrl: '/api/v1',
+  prefixUrl: API_BASE_URL,
   timeout: 30000,
   // Don't retry on 401 — we handle that in afterResponse
   retry: { limit: 2, methods: ['get'], statusCodes: [408, 429, 500, 502, 503, 504] },
