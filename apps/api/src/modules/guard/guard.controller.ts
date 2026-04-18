@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { GuardService } from './guard.service';
+import { Public } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('guard')
 @Controller('guard')
@@ -8,6 +9,7 @@ export class GuardController {
   constructor(private readonly guardService: GuardService) {}
 
   @Post('check')
+  @Public() // Guard validates JWT internally — skip global JwtAuthGuard
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-App-Id', description: 'Application identifier', required: true })

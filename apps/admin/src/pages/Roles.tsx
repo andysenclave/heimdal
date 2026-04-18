@@ -402,12 +402,23 @@ export default function Roles() {
     {
       key: 'permCount',
       header: 'Perms',
-      cell: (row) => (
-        <DecoBadge variant={row._count?.rolePermissions ? 'teal' : 'muted'} size="sm">
-          {row._count?.rolePermissions ?? 0}
-        </DecoBadge>
-      ),
-      className: 'w-[60px] text-center',
+      cell: (row) => {
+        const direct = row._count?.rolePermissions ?? 0;
+        const hasBase = !!row.baseRoleId;
+        return (
+          <div className="flex items-center gap-1">
+            <DecoBadge variant={direct ? 'teal' : 'muted'} size="sm">
+              {direct}
+            </DecoBadge>
+            {hasBase && (
+              <span className="font-mono text-[9px] text-deco-teal" title="Inherits from base role">
+                +
+              </span>
+            )}
+          </div>
+        );
+      },
+      className: 'w-[80px] text-center',
       headerClassName: 'text-center',
     },
     {

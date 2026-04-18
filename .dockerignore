@@ -2,9 +2,17 @@ node_modules
 dist
 .turbo
 .git
+.github
+.claude
 *.md
 .env*
 !.env.example
 coverage
 .vscode
 .idea
+.DS_Store
+**/.vite
+**/__tests__
+**/*.spec.ts
+**/*.test.ts
+docs/

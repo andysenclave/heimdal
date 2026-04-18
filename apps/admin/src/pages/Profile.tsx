@@ -18,6 +18,7 @@ import { ConfirmDialog } from '@components/common/ConfirmDialog';
 import { useOrganization } from '@api/hooks/useOrganizations';
 import { formatDate, formatRelative } from '@lib/format';
 import type { SessionInfo } from '@/types/models';
+import { MOCK_SESSIONS } from '@/__mocks__/fixtures';
 
 // --- Schemas ---
 
@@ -38,35 +39,6 @@ const passwordSchema = z
 
 type ProfileForm = z.infer<typeof profileSchema>;
 type PasswordForm = z.infer<typeof passwordSchema>;
-
-// --- Mock sessions ---
-
-const MOCK_SESSIONS: SessionInfo[] = [
-  {
-    id: 'sess_01',
-    userId: 'user_dev_mock',
-    ipAddress: '192.168.1.42',
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0',
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sess_02',
-    userId: 'user_dev_mock',
-    ipAddress: '10.0.0.15',
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_2) Safari/605.1',
-    expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'sess_03',
-    userId: 'user_dev_mock',
-    ipAddress: '172.16.0.8',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/134.0',
-    expiresAt: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
 
 // --- Helpers ---
 

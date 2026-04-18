@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@api/client';
-import { tokenStore } from '@api/tokenStore';
+import { tokenStore } from '@api/token-store';
 import type { AuthUser, SessionResponse } from '@api/types';
 // AuthUser imported for type narrowing of orgMembershipRole
 type OrgMembershipRole = AuthUser['orgMembershipRole'];

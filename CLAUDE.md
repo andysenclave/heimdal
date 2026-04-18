@@ -27,6 +27,11 @@ When making architectural decisions, **read the relevant prompt file** from `doc
 | Choosing state management approach | `docs/coding-prompts/16-state-management-decisions.md` |
 | Handling errors (frontend + backend) | `docs/coding-prompts/17-error-handling-patterns.md` |
 | Understanding data flow layers | `docs/coding-prompts/18-data-flow-architecture.md` |
+| Naming any file or folder | `docs/coding-prompts/19-file-and-folder-naming.md` |
+| **Building a page (SRP, composition limits)** | `docs/coding-prompts/20-page-composition-and-srp.md` |
+| **Making API calls from frontend** | `docs/coding-prompts/21-api-client-and-network-discipline.md` |
+| **Styling components (no inline styles)** | `docs/coding-prompts/22-no-inline-styles-or-hardcoded-tokens.md` |
+| **Dialog/modal management in pages** | `docs/coding-prompts/23-dialog-provider-pattern.md` |
 
 ---
 
@@ -92,19 +97,31 @@ modules/auth/
 
 ## 3. File & Folder Naming
 
+> **Full rules:** `docs/coding-prompts/19-file-and-folder-naming.md` — read it before creating any file.
+
+### Backend (`apps/api/`, `packages/`)
+
 | Type | Convention | Example |
 |------|-----------|---------|
 | Folders | `kebab-case` | `prisma-client/`, `access-binding/` |
-| Files (backend) | `kebab-case.suffix.ts` | `auth.controller.ts`, `signup.dto.ts` |
-| Files (frontend) | `kebab-case.tsx` for components | `stat-card.tsx`, `guard-tester.tsx` |
+| All `.ts` files | `kebab-case.suffix.ts` | `auth.controller.ts`, `signup.dto.ts` |
 | Classes | `PascalCase` | `AuthService`, `CreateOrgDto` |
-| Interfaces | `PascalCase` | `GuardCheckRequest` (no `I` prefix) |
+| Interfaces | `PascalCase` (no `I` prefix) | `GuardCheckRequest` |
 | Constants | `UPPER_SNAKE_CASE` | `API_VERSION`, `PERMISSION_PATTERN` |
 | Functions | `camelCase` | `isValidPermission()`, `resolveRoles()` |
 | Test files | `*.spec.ts` | `auth.service.spec.ts` |
 | Type-only files | `*.types.ts` | `entitlement.types.ts` |
 
-**Never:** `AuthControllerFile.ts`, `IGuardRequest`, `my_util.ts`
+### Frontend (`apps/admin/`)
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Component files | `PascalCase.tsx` | `CodexVersionBar.tsx`, `AppSelector.tsx` |
+| Hook files (`use*`) | `useXxx.ts` (camelCase) | `useDebounce.ts`, `useCodexVersions.ts` |
+| All other `.ts` files | `kebab-case.ts` | `query-keys.ts`, `token-store.ts` |
+
+**Never (backend):** `AuthService.ts`, `IGuardRequest`, `my_util.ts`
+**Never (frontend):** `codex-version-bar.tsx`, `use-debounce.ts`, `QueryKeys.ts`
 
 ---
 
@@ -300,7 +317,10 @@ components/
 - **Sections are middle ground.** They compose common components into meaningful UI blocks but don't own data fetching.
 - **Hooks extract logic.** `useGuardCheck()`, `useOrganizations()`, `useAuth()` — all data fetching and state logic lives in hooks, not in components.
 - **Props > context for component config.** Use React Context only for truly global state (theme, auth session). Everything else is props.
-- **One component per file.** Exception: tightly coupled sub-components that are never used elsewhere.
+- **One component per file.** No exceptions. If you're about to write a second `function` component in a file, create a new file instead. See `docs/coding-prompts/20-page-composition-and-srp.md`.
+- **No raw `fetch()` in components.** All HTTP calls go through the `api` client and React Query hooks. See `docs/coding-prompts/21-api-client-and-network-discipline.md`.
+- **No hardcoded colors, fonts, or massive inline styles.** Use `useTheme()` for all design tokens. See `docs/coding-prompts/22-no-inline-styles-or-hardcoded-tokens.md`.
+- **Pages stay under 150 lines.** If a page exceeds this, extract logic into hooks and UI into section components. See `docs/coding-prompts/20-page-composition-and-srp.md`.
 
 ### Hook Pattern
 ```typescript

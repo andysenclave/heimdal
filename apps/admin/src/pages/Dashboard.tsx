@@ -4,33 +4,11 @@ import { MiniBarChart } from '@components/charts/MiniBarChart';
 import { PageHeader } from '@components/common/PageHeader';
 import { ROUTES } from '@lib/constants';
 import { useDashboardStats } from '@api/hooks/useDashboard';
-
-// Sample data — will be replaced with real API data
-const guardCallsData = [
-  { name: 'Mon', value: 186 },
-  { name: 'Tue', value: 215 },
-  { name: 'Wed', value: 198 },
-  { name: 'Thu', value: 247 },
-  { name: 'Fri', value: 312 },
-  { name: 'Sat', value: 87 },
-  { name: 'Sun', value: 62 },
-];
-
-const userGrowthData = [
-  { name: 'Oct', value: 4 },
-  { name: 'Nov', value: 6 },
-  { name: 'Dec', value: 3 },
-  { name: 'Jan', value: 8 },
-  { name: 'Feb', value: 5 },
-  { name: 'Mar', value: 7 },
-];
-
-const recentDecisions = [
-  { user: 'andy@thimple.in', resource: 'portfolio:read', allowed: true, time: '2m ago' },
-  { user: 'viewer@acme.com', resource: 'trade:execute', allowed: false, time: '5m ago' },
-  { user: 'admin@thimple.in', resource: 'watchlist:manage', allowed: true, time: '12m ago' },
-  { user: 'guest@dev.io', resource: 'portfolio:write', allowed: false, time: '18m ago' },
-];
+import {
+  MOCK_GUARD_CALLS_CHART as guardCallsData,
+  MOCK_USER_GROWTH_CHART as userGrowthData,
+  MOCK_RECENT_DECISIONS as recentDecisions,
+} from '@/__mocks__/fixtures';
 
 export default function Dashboard() {
   const navigate = useNavigate();

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@api/client';
-import { queryKeys } from '@lib/queryKeys';
+import { queryKeys } from '@lib/query-keys';
 import type { Role, Permission } from '@/types/models';
 import type { PaginatedResponse } from '@api/types';
 
@@ -112,8 +112,11 @@ export function useAssignPermissions() {
         .post(`admin/roles/${roleId}/permissions`, { json: { permissionIds } })
         .json<Role>();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.roles.detail(variables.roleId), 'permissions'],
+      });
     },
   });
 }
@@ -130,10 +133,20 @@ export function useRemovePermissionFromRole() {
     }) => {
       await api.delete(`admin/roles/${roleId}/permissions/${permissionId}`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.roles.detail(variables.roleId), 'permissions'],
+      });
     },
   });
+}
+
+export interface RoleWithPermissions extends Role {
+  rolePermissions?: { permission: Permission }[];
+  inheritedPermissions?: Permission[];
+  effectiveCount?: number;
+  roleChain?: string[];
 }
 
 export function useRoleWithPermissions(roleId: string) {
@@ -142,11 +155,7 @@ export function useRoleWithPermissions(roleId: string) {
     queryFn: () =>
       api
         .get(`admin/roles/${roleId}`)
-        .json<
-          Role & {
-            rolePermissions?: { permission: Permission }[];
-          }
-        >(),
+        .json<RoleWithPermissions>(),
     enabled: !!roleId,
   });
 }

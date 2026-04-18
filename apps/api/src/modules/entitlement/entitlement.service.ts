@@ -14,6 +14,7 @@ import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 
 const ROLE_INCLUDE = {
   baseRole: { select: { id: true, name: true } },
+  rolePermissions: { include: { permission: true } },
   _count: { select: { rolePermissions: true, userAppRoles: true, derivedRoles: true } },
 } as const;
 
@@ -203,6 +204,24 @@ export class EntitlementService {
     });
   }
 
+  async removeUserRole(appId: string, userId: string, roleId: string) {
+    const assignment = await this.prisma.userAppRole.findUnique({
+      where: { userId_appId_roleId: { userId, appId, roleId } },
+    });
+    if (!assignment) {
+      throw new NotFoundException('User does not have this role in this application');
+    }
+    return this.prisma.userAppRole.delete({ where: { id: assignment.id } });
+  }
+
+  async listUserRoles(appId: string, userId: string) {
+    return this.prisma.userAppRole.findMany({
+      where: { appId, userId },
+      include: { role: { select: { id: true, name: true, isSystem: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   // ─── Access bindings ───────────────────────────────────────────────────────
 
   async createBinding(
@@ -232,6 +251,25 @@ export class EntitlementService {
       include: { permission: true },
       orderBy: { resource: 'asc' },
     });
+  }
+
+  async updateBinding(
+    bindingId: string,
+    data: { resource?: string; description?: string },
+  ) {
+    const binding = await this.prisma.accessBinding.findUnique({ where: { id: bindingId } });
+    if (!binding) throw new NotFoundException(`Access binding "${bindingId}" not found`);
+    return this.prisma.accessBinding.update({
+      where: { id: bindingId },
+      data,
+      include: { permission: true },
+    });
+  }
+
+  async deleteBinding(bindingId: string) {
+    const binding = await this.prisma.accessBinding.findUnique({ where: { id: bindingId } });
+    if (!binding) throw new NotFoundException(`Access binding "${bindingId}" not found`);
+    return this.prisma.accessBinding.delete({ where: { id: bindingId } });
   }
 
   // ─── App users ────────────────────────────────────────────────────────────
@@ -281,9 +319,129 @@ export class EntitlementService {
     return { data, total: data.length };
   }
 
-  // ─── Entitlement resolution (stub — full engine in HD-022) ────────────────
+  // ─── Entitlement resolution engine (HD-022) ──────────────────────────────
 
-  async resolveEntitlements(_appId: string, _userId: string) {
-    return { permissions: [], message: 'Entitlement resolution engine pending (HD-022).' };
+  /**
+   * Resolve the effective set of permissions for a user in a given app.
+   * Walks the role hierarchy (via baseRoleId) and aggregates all permissions.
+   *
+   * Steps:
+   *   1. Find all roles directly assigned to the user in this app
+   *   2. For each role, walk up the inheritance chain (baseRoleId)
+   *   3. Collect all unique permissions from every role in the chain
+   */
+  async resolveEntitlements(appId: string, userId: string) {
+    // 1. Get all roles directly assigned to user in this app
+    const userAppRoles = await this.prisma.userAppRole.findMany({
+      where: { appId, userId },
+      include: { role: true },
+    });
+
+    if (userAppRoles.length === 0) {
+      return { roles: [], permissions: [], resolvedRoleChain: [] };
+    }
+
+    // 2. Walk the full role hierarchy for each assigned role
+    const allRoleIds = new Set<string>();
+    const resolvedRoleChain: string[] = [];
+
+    for (const uar of userAppRoles) {
+      await this.walkRoleHierarchy(uar.roleId, allRoleIds, resolvedRoleChain);
+    }
+
+    // 3. Collect all permissions from all resolved roles
+    const rolePermissions = await this.prisma.rolePermission.findMany({
+      where: { roleId: { in: [...allRoleIds] } },
+      include: { permission: { select: { id: true, key: true, description: true } } },
+    });
+
+    // Deduplicate by permission key
+    const permMap = new Map<string, { id: string; key: string; description: string | null }>();
+    for (const rp of rolePermissions) {
+      permMap.set(rp.permission.key, rp.permission);
+    }
+
+    const roles = userAppRoles.map((uar) => ({
+      id: uar.role.id,
+      name: uar.role.name,
+      isSystem: uar.role.isSystem,
+    }));
+
+    return {
+      roles,
+      permissions: [...permMap.values()],
+      resolvedRoleChain,
+    };
+  }
+
+  /**
+   * Resolve the effective permission set for a single ROLE (not user).
+   * Walks the baseRoleId chain upward, collects direct + inherited permissions.
+   *
+   * Returns both sets so the UI can distinguish which are direct vs inherited.
+   */
+  async resolveRolePermissions(roleId: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: { ...ROLE_INCLUDE },
+    });
+    if (!role) throw new NotFoundException(`Role "${roleId}" not found`);
+
+    // Direct permissions on this role
+    const directPermIds = new Set(role.rolePermissions.map((rp) => rp.permissionId));
+
+    // Walk the hierarchy to collect inherited permissions
+    const allRoleIds = new Set<string>();
+    const chain: string[] = [];
+    await this.walkRoleHierarchy(roleId, allRoleIds, chain);
+
+    // Remove the role itself — we already have its direct permissions
+    allRoleIds.delete(roleId);
+
+    // Fetch permissions from ancestor roles only
+    const inheritedRps = allRoleIds.size > 0
+      ? await this.prisma.rolePermission.findMany({
+          where: { roleId: { in: [...allRoleIds] } },
+          include: { permission: { select: { id: true, key: true, description: true } } },
+        })
+      : [];
+
+    // Deduplicate inherited by permission key, exclude already-direct ones
+    const inheritedMap = new Map<string, { id: string; key: string; description: string | null }>();
+    for (const rp of inheritedRps) {
+      if (!directPermIds.has(rp.permissionId)) {
+        inheritedMap.set(rp.permission.key, rp.permission);
+      }
+    }
+
+    return {
+      ...role,
+      inheritedPermissions: [...inheritedMap.values()],
+      effectiveCount: directPermIds.size + inheritedMap.size,
+      roleChain: chain,
+    };
+  }
+
+  /**
+   * Recursively walk the role hierarchy upward via baseRoleId.
+   * Prevents infinite loops via the visited set.
+   */
+  private async walkRoleHierarchy(
+    roleId: string,
+    visited: Set<string>,
+    chain: string[],
+  ): Promise<void> {
+    if (visited.has(roleId)) return;
+    visited.add(roleId);
+    chain.push(roleId);
+
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      select: { baseRoleId: true },
+    });
+
+    if (role?.baseRoleId) {
+      await this.walkRoleHierarchy(role.baseRoleId, visited, chain);
+    }
   }
 }

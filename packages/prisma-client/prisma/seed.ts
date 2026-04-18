@@ -9,7 +9,7 @@ async function main() {
   console.log('Seeding Heimdal database...');
 
   // ── Bootstrap Heimdal Admin ──────────────────────────
-  const bootstrapEmail = process.env.HEIMDAL_BOOTSTRAP_EMAIL || 'admin@heimdal.thimple.in';
+  const bootstrapEmail = process.env.HEIMDAL_BOOTSTRAP_EMAIL || 'admin@heimdal.in';
   const bootstrapPassword = process.env.HEIMDAL_BOOTSTRAP_PASSWORD || 'changeme-on-first-login';
 
   const existingBootstrap = await prisma.user.findUnique({ where: { email: bootstrapEmail } });

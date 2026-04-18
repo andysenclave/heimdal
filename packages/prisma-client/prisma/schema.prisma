@@ -27,13 +27,12 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Relations
-  applications  Application[]
-  memberships   OrgMembership[]
-  roles         Role[]
-  permissions   Permission[]
-  auditLogs     AuditLog[]
-  invites       Invite[]
-
+  applications   Application[]
+  memberships    OrgMembership[]
+  roles          Role[]
+  permissions    Permission[]
+  auditLogs      AuditLog[]
+  invites        Invite[]
   @@map("organizations")
 }
 
@@ -62,7 +61,6 @@ model Application {
   orgMemberships  OrgMembership[]
   invites         Invite[]
   appMemberships  AppMembership[]
-
   @@index([orgId])
   @@map("applications")
 }
@@ -87,14 +85,13 @@ model User {
   isHeimdalAdmin Boolean   @default(false)
 
   // Relations
-  memberships      OrgMembership[]
-  userAppRoles     UserAppRole[]
-  sessions         Session[]
-  auditLogs        AuditLog[]
-  invitesSent      Invite[]    @relation("InvitesSent")
-  invitesAccepted  Invite[]    @relation("InviteAccepted")
-  appMemberships   AppMembership[]
-
+  memberships              OrgMembership[]
+  userAppRoles             UserAppRole[]
+  sessions                 Session[]
+  auditLogs                AuditLog[]
+  invitesSent              Invite[]         @relation("InvitesSent")
+  invitesAccepted          Invite[]         @relation("InviteAccepted")
+  appMemberships           AppMembership[]
   @@map("users")
 }
 
@@ -369,3 +366,4 @@ enum InviteStatus {
   EXPIRED
   REVOKED
 }
+
