@@ -11,7 +11,6 @@ COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 # Copy workspace package.json files
 COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
-COPY packages/sdk/package.json ./packages/sdk/
 COPY packages/prisma-client/package.json ./packages/prisma-client/
 
 # Install all workspace dependencies (production + dev for build)
@@ -45,8 +44,7 @@ COPY --from=build --chown=heimdal:heimdal /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=heimdal:heimdal /app/apps/api/package.json ./apps/api/
 COPY --from=build --chown=heimdal:heimdal /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build --chown=heimdal:heimdal /app/packages/shared/package.json ./packages/shared/
-COPY --from=build --chown=heimdal:heimdal /app/packages/sdk/dist ./packages/sdk/dist
-COPY --from=build --chown=heimdal:heimdal /app/packages/sdk/package.json ./packages/sdk/
+# SDK is not a runtime dependency of the API — skip copying
 COPY --from=build --chown=heimdal:heimdal /app/packages/prisma-client/dist ./packages/prisma-client/dist
 COPY --from=build --chown=heimdal:heimdal /app/packages/prisma-client/package.json ./packages/prisma-client/
 COPY --from=build --chown=heimdal:heimdal /app/packages/prisma-client/prisma ./packages/prisma-client/prisma
