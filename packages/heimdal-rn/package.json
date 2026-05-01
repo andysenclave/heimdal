@@ -1,0 +1,43 @@
+{
+  "name": "@andysenclave/heimdal-rn",
+  "version": "0.1.0",
+  "description": "Heimdal IAM SDK for React Native — HeimdalProvider and useAuth() hook",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@heimdal/shared": "*"
+  },
+  "bundleDependencies": [
+    "@heimdal/shared"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.73.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-native": "^0.73.0",
+    "react": "^18.3.0",
+    "react-native": "^0.76.0",
+    "typescript": "^5.7.0"
+  }
+}
