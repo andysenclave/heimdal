@@ -1,0 +1,48 @@
+name: Publish SDKs
+
+# Trigger: push a tag in the form  sdk-v0.1.0
+# This publishes both @andysenclave/heimdal-nest and @andysenclave/heimdal-rn together.
+# To cut a release:
+#   git tag sdk-v0.1.0 && git push origin sdk-v0.1.0
+on:
+  push:
+    tags:
+      - 'sdk-v*.*.*'
+
+jobs:
+  publish:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write   # required to push to GitHub Packages
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (GitHub Packages registry for @andysenclave scope)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@andysenclave'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Turbo resolves build order automatically (^build dependency chain).
+      # This will build @heimdal/shared first, then both SDK packages.
+      - name: Build SDK packages
+        run: npx turbo run build --filter=@andysenclave/heimdal-nest --filter=@andysenclave/heimdal-rn
+
+      - name: Publish @andysenclave/heimdal-nest
+        run: npm publish --workspace=packages/heimdal-nest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @andysenclave/heimdal-rn
+        run: npm publish --workspace=packages/heimdal-rn
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

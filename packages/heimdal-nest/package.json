@@ -1,0 +1,44 @@
+{
+  "name": "@andysenclave/heimdal-nest",
+  "version": "0.1.0",
+  "description": "Heimdal IAM SDK for NestJS — @HeimdalGuard() decorator and @CurrentUser() parameter extractor",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@heimdal/shared": "*"
+  },
+  "bundleDependencies": [
+    "@heimdal/shared"
+  ],
+  "peerDependencies": {
+    "@nestjs/common": ">=10.0.0",
+    "@nestjs/core": ">=10.0.0",
+    "reflect-metadata": ">=0.1.13"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "reflect-metadata": "^0.2.2",
+    "typescript": "^5.7.0"
+  }
+}
